@@ -23,7 +23,8 @@ type Screen = 'login' | 'register' | 'forgot' | 'dashboard' | 'catalog' | 'cours
 export const MASTER_ADMIN_EMAILS = [
   'daru.fahma@gmail.com',
   'fahmaadaru@gmail.com',
-  'darciatemantaraglobal@gmail.com'
+  'darciatemantaraglobal@gmail.com',
+  'almadrajstudy@gmail.com'
 ];
 export const isMasterAdmin = (email?: string | null): boolean => {
   if (!email) return false;
