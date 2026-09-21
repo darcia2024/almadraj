@@ -2,15 +2,31 @@
   "rewrites": [
     {
       "source": "/belajar",
-      "destination": "/belajar.html"
+      "destination": "/index.html"
     },
     {
-      "source": "/almadraj/belajar",
-      "destination": "/belajar.html"
+      "source": "/kelas",
+      "destination": "/index.html"
     },
     {
-      "source": "/almadroj/belajar",
-      "destination": "/belajar.html"
+      "source": "/katalog",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/buku",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/kitab",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/profil",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tentang-kami",
+      "destination": "/index.html"
     },
     {
       "source": "/",
