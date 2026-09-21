@@ -5269,29 +5269,44 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
                     key={course.id}
                     className="group flex h-full flex-col overflow-hidden rounded-[16px] sm:rounded-[20px] border border-[#dce9df] bg-white transition hover:-translate-y-0.5 hover:border-[#91c9a4] hover:shadow-[0_16px_35px_rgba(7,84,71,0.08)]"
                   >
+                    {/* Course Thumbnail Image with Exact Aspect Ratio and Overlays */}
                     <div
-                      className={
-                        'relative flex w-full flex-col justify-between p-3 sm:p-4 overflow-hidden ' +
-                        (index % 3 === 1 ? 'bg-[#e8f2f8]' : index % 3 === 2 ? 'bg-[#f6efdf]' : 'bg-[#e5f4f2]')
-                      }
-                      style={{ aspectRatio: '116.501 / 65.024' }}
+                      className="relative w-full overflow-hidden bg-[#eef4f0]"
+                      style={{ aspectRatio: '116501 / 65024' }}
                     >
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="flex flex-wrap gap-1">
-                          <span className="rounded-full bg-[#006d77] px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-white">
-                            {course.program_type || 'Dars'}
-                          </span>
-                          <span className="rounded-full bg-white/85 px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-[#006d77] truncate max-w-[80px] sm:max-w-none">
-                            {course.faculty}
+                      <img
+                        src={(course as any).thumbnail_url || (course as any).thumbnail || getCourseCoverImage(course.slug || course.title, course.faculty)}
+                        alt={course.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (!target.src.includes('cover-fikih')) {
+                            target.src = '/courses/cover-fikih-matan-abi-syuja.png';
+                          }
+                        }}
+                      />
+                      {/* Dark Gradient Overlay for High-Contrast Text & Badges */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/40 pointer-events-none" />
+
+                      <div className="absolute inset-0 flex flex-col justify-between p-3 sm:p-4 pointer-events-none">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            <span className="rounded-full bg-[#006d77] px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-white shadow-xs">
+                              {course.program_type || 'Dars'}
+                            </span>
+                            <span className="rounded-full bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-[#006d77] truncate max-w-[80px] sm:max-w-none shadow-xs">
+                              {course.faculty}
+                            </span>
+                          </div>
+                          <span className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-white/85 backdrop-blur-xs text-[#006d77] shadow-xs">
+                            <BookOpen className="h-3 w-3 sm:h-4 sm:w-4" />
                           </span>
                         </div>
-                        <span className="flex h-6 w-6 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-white/75 text-[#006d77]">
-                          <BookOpen className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </span>
+                        <p className="mt-2 sm:mt-10 text-[10px] sm:text-xs font-semibold text-white/95 drop-shadow-xs truncate">
+                          {course.duration}
+                        </p>
                       </div>
-                      <p className="mt-2 sm:mt-10 text-[10px] sm:text-xs font-semibold text-[#47755f] truncate">
-                        {course.duration}
-                      </p>
                     </div>
                     <div className="flex flex-1 flex-col p-3 sm:p-5 text-left">
                       <h2 className="text-xs sm:text-xl font-semibold leading-tight sm:leading-snug text-[#17382c] line-clamp-2 min-h-[32px] sm:min-h-0">
