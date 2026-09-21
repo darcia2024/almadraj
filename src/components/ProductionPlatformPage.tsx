@@ -176,35 +176,64 @@ export const ProductionPlatformPage: React.FC = () => {
     const sb = supabase;
     const userEmail = (sessionUser.email || '').toLowerCase().trim();
     const isMaster = isMasterAdmin(userEmail);
+    const fallbackName = (typeof sessionUser.user_metadata?.full_name === 'string' && sessionUser.user_metadata.full_name) || (sessionUser.email ? sessionUser.email.split('@')[0] : 'Pengguna');
+    const fallbackRole = isMaster ? 'admin' : 'student';
+    const googleAvatar = typeof sessionUser.user_metadata?.avatar_url === 'string' ? sessionUser.user_metadata.avatar_url : typeof sessionUser.user_metadata?.picture === 'string' ? sessionUser.user_metadata.picture : '';
 
-    sb.from('profiles').select('id,full_name,whatsapp,role,avatar_path,email').eq('id', sessionUser.id).maybeSingle().then(async ({ data, error: queryError }: { data: (Profile & { email?: string }) | null; error: { message: string } | null }) => {
-      let activeProfile = data;
-      if (queryError || !activeProfile) {
-        const fallbackName = (typeof sessionUser.user_metadata?.full_name === 'string' && sessionUser.user_metadata.full_name) || (sessionUser.email ? sessionUser.email.split('@')[0] : 'Pengguna');
-        const fallbackRole = isMaster ? 'admin' : 'student';
-        const { data: upserted } = await sb.from('profiles').upsert({
+    const fetchProfile = async () => {
+      let activeProfile: (Profile & { email?: string }) | null = null;
+
+      // 1. Try select with email column
+      const res = await sb.from('profiles').select('id,full_name,whatsapp,role,avatar_path,email').eq('id', sessionUser.id).maybeSingle();
+      if (res.data) {
+        activeProfile = res.data;
+      } else if (res.error) {
+        // Fallback without email column if table does not have email column yet
+        const retry = await sb.from('profiles').select('id,full_name,whatsapp,role,avatar_path').eq('id', sessionUser.id).maybeSingle();
+        if (retry.data) activeProfile = retry.data;
+      }
+
+      // 2. If profile record doesn't exist in profiles table yet, upsert it
+      if (!activeProfile) {
+        const upsertRes = await sb.from('profiles').upsert({
           id: sessionUser.id,
           email: userEmail,
           full_name: fallbackName,
           whatsapp: '',
           role: fallbackRole,
         }).select('id,full_name,whatsapp,role,avatar_path,email').maybeSingle();
-        if (upserted) {
-          activeProfile = upserted;
+
+        if (upsertRes.data) {
+          activeProfile = upsertRes.data;
+        } else {
+          // If upsert with email column failed (e.g. email column doesn't exist yet), retry without email
+          const fallbackUpsert = await sb.from('profiles').upsert({
+            id: sessionUser.id,
+            full_name: fallbackName,
+            whatsapp: '',
+            role: fallbackRole,
+          }).select('id,full_name,whatsapp,role,avatar_path').maybeSingle();
+          if (fallbackUpsert.data) activeProfile = fallbackUpsert.data;
         }
       } else if (!activeProfile.email && userEmail) {
+        // Try updating email if possible, silently ignoring if column not yet added
         sb.from('profiles').update({ email: userEmail }).eq('id', sessionUser.id).then(() => null, () => null);
         activeProfile.email = userEmail;
       }
 
+      // 3. Fallback active profile if DB operations had any issue, so user is NEVER left without profile/sidebar
       if (!activeProfile) {
-        if (queryError) setError(queryError.message);
-        setProfile(null);
-        return;
+        activeProfile = {
+          id: sessionUser.id,
+          full_name: fallbackName,
+          whatsapp: '',
+          role: fallbackRole,
+          email: userEmail,
+        };
       }
 
       if (isMaster && activeProfile.role !== 'admin') {
-        await sb.from('profiles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('id', sessionUser.id);
+        await sb.from('profiles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('id', sessionUser.id).then(() => null, () => null);
         activeProfile.role = 'admin';
       }
 
@@ -212,9 +241,20 @@ export const ProductionPlatformPage: React.FC = () => {
         activeProfile.role = 'admin';
       }
 
-      const googleAvatar = typeof sessionUser.user_metadata?.avatar_url === 'string' ? sessionUser.user_metadata.avatar_url : typeof sessionUser.user_metadata?.picture === 'string' ? sessionUser.user_metadata.picture : '';
       const signedAvatar = activeProfile.avatar_path ? await sb.storage.from('profile-avatars').createSignedUrl(activeProfile.avatar_path, 3600) : null;
       setProfile({ ...activeProfile, avatar_url: signedAvatar?.data?.signedUrl || googleAvatar });
+    };
+
+    fetchProfile().catch((err) => {
+      console.warn('Profile load fallback triggered:', err);
+      setProfile({
+        id: sessionUser.id,
+        full_name: fallbackName,
+        whatsapp: '',
+        role: fallbackRole,
+        avatar_url: googleAvatar,
+        email: userEmail,
+      });
     });
   }, [sessionUser]);
 
@@ -300,33 +340,58 @@ const AuthScreenV2 = ({ onNavigate, onError, error }: { onNavigate: (path: strin
 };
 
 const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children }: { profile: Profile | null; onNavigate: (path: string) => void; onLogout: () => void; onProfileSaved?: (profile: Profile) => void; children: React.ReactNode }) => {
-  const [sidebarVisible, setSidebarVisible] = useState(() => window.localStorage.getItem('al-madraj-student-sidebar') !== 'hidden');
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    if (window.innerWidth >= 1024) {
+      return window.localStorage.getItem('al-madraj-sidebar-desktop') !== 'hidden';
+    }
+    return false;
+  });
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [shellProfile, setShellProfile] = useState(profile);
   const currentPath = window.location.pathname;
-  useEffect(() => setShellProfile(profile), [profile]);
-  const hasSidebar = Boolean(shellProfile);
+
+  useEffect(() => {
+    if (profile) setShellProfile(profile);
+  }, [profile]);
+
+  const effectiveProfile: Profile = shellProfile || {
+    id: '',
+    full_name: 'Santri Al Madraj',
+    whatsapp: '',
+    role: 'student',
+    avatar_url: '',
+  };
+
   const toggleSidebar = () => {
     const nextVisible = !sidebarVisible;
     setSidebarVisible(nextVisible);
-    window.localStorage.setItem('al-madraj-student-sidebar', nextVisible ? 'visible' : 'hidden');
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      window.localStorage.setItem('al-madraj-sidebar-desktop', nextVisible ? 'visible' : 'hidden');
+    }
   };
+
+  const handleNavigate = (targetPath: string) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarVisible(false);
+    }
+    onNavigate(targetPath);
+  };
+
   return (
     <div className="platform-compact min-h-[100dvh] w-full max-w-full bg-white text-[#17231b]">
       <header className="fixed top-0 left-0 right-0 z-50 h-[64px] border-b border-[#dce9df] bg-white/95 backdrop-blur shadow-xs">
         <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            {hasSidebar && (
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                aria-label={sidebarVisible ? 'Tutup sidebar' : 'Buka sidebar'}
-                title={sidebarVisible ? 'Tutup sidebar' : 'Buka sidebar'}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:border-[#006d77] hover:text-[#006d77] cursor-pointer"
-              >
-                <Menu className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={sidebarVisible ? 'Tutup sidebar navigasi' : 'Buka sidebar navigasi'}
+              title={sidebarVisible ? 'Tutup sidebar navigasi' : 'Buka sidebar navigasi'}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:border-[#006d77] hover:text-[#006d77] cursor-pointer"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             <a href="/" className="flex shrink-0 items-center" title="Al Madraj">
               <img src="/al-madroj-brand.png" alt="Al Madraj" className="h-9 w-auto object-contain shrink-0" />
             </a>
@@ -351,7 +416,7 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
           </div>
 
           <nav className="hidden items-center gap-6 text-sm font-semibold text-[#607568] lg:flex">
-            {shellProfile?.role === 'admin' && (
+            {effectiveProfile.role === 'admin' && (
               <button
                 onClick={() => onNavigate('/admin')}
                 className={'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition ' + (currentPath === '/admin' ? 'bg-[#006d77] text-white' : 'bg-[#e5f4f2] text-[#006d77] hover:bg-[#d6f0df]')}
@@ -362,7 +427,7 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
             )}
           </nav>
           <div className="flex items-center gap-2.5 shrink-0">
-            {shellProfile && <NotificationMenu userId={shellProfile.id} onNavigate={onNavigate} />}
+            {effectiveProfile.id && <NotificationMenu userId={effectiveProfile.id} onNavigate={onNavigate} />}
             <button
               type="button"
               onClick={() => setProfileEditorOpen(true)}
@@ -370,13 +435,13 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
               title="Pengaturan profil"
             >
               <UserAvatar
-                src={shellProfile?.avatar_url}
-                name={shellProfile?.full_name}
+                src={effectiveProfile.avatar_url}
+                name={effectiveProfile.full_name}
                 size="sm"
                 className="ring-1 ring-[#cbe3d3]"
               />
               <span className="hidden max-w-[130px] truncate text-xs font-semibold text-[#17382c] sm:inline">
-                {shellProfile?.full_name?.trim() || 'Pengguna'}
+                {effectiveProfile.full_name?.trim() || 'Pengguna'}
               </span>
             </button>
             <button
@@ -390,17 +455,15 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
           </div>
         </div>
       </header>
-      {hasSidebar && (
-        <DashboardSidebar
-          open={sidebarVisible}
-          profile={shellProfile}
-          currentPath={currentPath}
-          onNavigate={onNavigate}
-          onLogout={onLogout}
-          onProfileClick={() => setProfileEditorOpen(true)}
-        />
-      )}
-      {hasSidebar && sidebarVisible && (
+      <DashboardSidebar
+        open={sidebarVisible}
+        profile={effectiveProfile}
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
+        onLogout={onLogout}
+        onProfileClick={() => setProfileEditorOpen(true)}
+      />
+      {sidebarVisible && (
         <button
           type="button"
           onClick={toggleSidebar}
@@ -410,16 +473,16 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
       )}
       <div
         className={`w-full min-w-0 pt-[64px] transition-[padding] duration-200 ${
-          hasSidebar && sidebarVisible ? 'lg:pl-[224px]' : 'lg:pl-0'
+          sidebarVisible ? 'lg:pl-[224px]' : 'lg:pl-0'
         }`}
       >
         <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pb-16 pt-6 sm:pt-8 min-w-0">
           <main className="w-full min-w-0">{children}</main>
         </div>
       </div>
-      {hasSidebar && profileEditorOpen && shellProfile && (
+      {profileEditorOpen && (
         <ProfileQuickEdit
-          profile={shellProfile}
+          profile={effectiveProfile}
           onClose={() => setProfileEditorOpen(false)}
           onSaved={(nextProfile) => {
             setShellProfile(nextProfile);
