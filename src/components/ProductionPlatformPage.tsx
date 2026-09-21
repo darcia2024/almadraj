@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, Bell, Bookmark, BookOpen, CalendarDays, Camera, Check,
-  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, CreditCard, Eye, FileText, Flame, GraduationCap,
-  ImageIcon, LayoutDashboard, Lock, LockKeyhole, LogOut, Maximize, Menu, Minimize, MoreHorizontal, Pause, Pencil, Play, Plus,
-  RefreshCw, RotateCcw, RotateCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Star,
-  Tag, Target, Trash2, UserRound, UsersRound, Volume2, VolumeX, X
+  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, CreditCard, Download, Eye, FileCheck, FileText,
+  Flame, GraduationCap, Headphones, ImageIcon, LayoutDashboard, Lock, LockKeyhole, LogOut, Maximize, Menu,
+  MessageCircle, Minimize, MoreHorizontal, Music, Pause, Pencil, Play, Plus, Printer, RefreshCw, RotateCcw,
+  RotateCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Target, Trash2,
+  UserRound, UsersRound, Video, Volume2, VolumeX, X
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
@@ -12,8 +13,37 @@ import { MayarPaymentModal } from './MayarPaymentModal';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 
 type ProgramType = 'Dars' | 'Bimbel';
-type Course = { id: string; slug: string; title: string; program_type?: ProgramType; faculty: string; summary: string; tutor: string; schedule: string; duration: string; price: number; thumbnail?: string; thumbnail_url?: string };
-type Lesson = { id: string; course_id: string; title: string; content_type: 'video' | 'pdf' | 'text'; duration: string; content_url?: string | null; sort_order: number };
+type Course = {
+  id: string;
+  slug: string;
+  title: string;
+  program_type?: ProgramType;
+  faculty: string;
+  summary: string;
+  tutor: string;
+  schedule: string;
+  duration: string;
+  price: number;
+  thumbnail?: string;
+  thumbnail_url?: string;
+  pj_name?: string;
+  pj_contact?: string;
+  pj_email?: string;
+  media_format?: 'video' | 'audio' | 'hybrid';
+  modul_url?: string;
+  has_certificate?: boolean;
+};
+type Lesson = {
+  id: string;
+  course_id: string;
+  title: string;
+  content_type: 'video' | 'audio' | 'pdf' | 'text';
+  duration: string;
+  content_url?: string | null;
+  sort_order: number;
+  teacher_notes?: string;
+  board_photos?: string[];
+};
 type LessonProgress = { lesson_id: string; watched_seconds: number; duration_seconds: number; completed_at: string | null; last_watched_at?: string | null };
 type YouTubeMetadata = { title: string; authorName: string; thumbnailUrl: string };
 type Profile = { id: string; full_name: string; whatsapp: string; role: 'student' | 'admin'; avatar_path?: string | null; avatar_url?: string };
@@ -3194,22 +3224,265 @@ const CourseRouteV2 = ({
   );
 };
 
-const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate: (path: string) => void; onError: (message: string) => void }) => { const [course, setCourse] = useState<Course | null>(null); const [loading, setLoading] = useState(true); const [submitting, setSubmitting] = useState(false); useEffect(() => { requireSupabase().from('courses').select('*').eq('slug', path.split('/')[2]).eq('is_published', true).single().then(({ data }: { data: Course | null }) => { setCourse(data); setLoading(false); }); }, [path]); const start = async () => { if (!course) return; setSubmitting(true); onError(''); try { const sb = requireSupabase();      if (course.price === 0) {
-        try {
-          await sb.rpc('enroll_lms_free_course', { p_course_slug: course.slug });
-        } catch {}
-        const { data: userData } = await sb.auth.getUser();
-        if (userData?.user?.id) {
-          await sb.from('enrollments').upsert({
-            user_id: userData.user.id,
-            course_id: course.id,
-            status: 'active',
-            activated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,course_id' });
+const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate: (path: string) => void; onError: (message: string) => void }) => {
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
+  const [hasActiveAccess, setHasActiveAccess] = useState(false);
+  const [mayarError, setMayarError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const sb = requireSupabase();
+        const slug = path.split('/')[2];
+        const { data: cData } = await sb.from('courses').select('*').eq('slug', slug).eq('is_published', true).single();
+        if (active && cData) {
+          setCourse(cData as Course);
         }
-        onNavigate('/belajar/' + course.slug);
-        return;
-      } const order = await sb.rpc('create_lms_order', { p_course_slug: course.slug }); if (order.error) throw new Error(order.error.message); const { data: sessionData } = await sb.auth.getSession(); const endpoint = import.meta.env.VITE_MAYAR_CHECKOUT_ENDPOINT || '/api/mayar/create-checkout'; const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (sessionData.session?.access_token || '') }, body: JSON.stringify({ orderId: order.data.id }) }); const result = await response.json(); if (!response.ok || !result.checkoutUrl) throw new Error(result.message || 'Checkout gagal dibuat.'); window.location.assign(result.checkoutUrl); } catch (submitError) { onError(submitError instanceof Error ? submitError.message : 'Checkout gagal.'); } finally { setSubmitting(false); } }; if (loading || !course) return <PublicLoading />; return <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><section className="rounded-2xl border border-[#dce9df] bg-white p-6 sm:p-8"><button onClick={() => onNavigate('/kelas/' + course.slug)} className="flex items-center gap-2 text-sm font-semibold text-[#607568]"><ArrowLeft className="h-4 w-4" /> Kembali ke kelas</button><p className="mt-10 text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">{course.price === 0 ? 'Akses gratis' : 'Order baru'}</p><h1 className="mt-3 text-3xl font-semibold">{course.title}</h1><div className="mt-6 border-t border-[#e1eee4] pt-5"><Summary label="Peserta" value="Akun terautentikasi" /><Summary label="Akses" value="Video dan pembahasan" /><Summary label="Total" value={course.price === 0 ? 'Gratis' : money(course.price)} strong /></div></section><section className="rounded-2xl bg-[#102c22] p-6 text-white sm:p-8"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">{course.price === 0 ? 'Program terbuka' : 'Pembayaran resmi'}</p><h2 className="mt-3 text-2xl font-semibold">{course.price === 0 ? 'Mulai kajian sekarang' : 'Lanjut ke Pembayaran'}</h2><p className="mt-4 text-sm leading-6 text-[#c5d9cf]">{course.price === 0 ? 'Aktifkan akses di akunmu tanpa pembayaran. Setelah aktif, video kajian bisa dibuka dari ruang belajar.' : 'Order dibuat di database lebih dulu. Status akses hanya berubah aktif setelah pembayaran berhasil dikonfirmasi secara otomatis.'}</p><button disabled={submitting} onClick={start} className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#83c5be] px-5 text-sm font-bold text-[#102c22]">{submitting ? 'Menyiapkan akses...' : course.price === 0 ? 'Aktifkan akses gratis' : 'Lanjut Pembayaran'} <CreditCard className="h-4 w-4" /></button></section></div>; };
+
+        const { data: uData } = await sb.auth.getUser();
+        if (active && uData?.user) {
+          setCurrentUser(uData.user);
+          const { data: pData } = await sb.from('profiles').select('*').eq('id', uData.user.id).single();
+          if (active && pData) setCurrentProfile(pData as Profile);
+
+          if (cData) {
+            const { data: enr } = await sb.from('enrollments').select('status').eq('user_id', uData.user.id).eq('course_id', cData.id).eq('status', 'active').maybeSingle();
+            if (active && enr) setHasActiveAccess(true);
+          }
+        }
+      } catch (err: any) {
+        if (active) onError(err?.message || 'Gagal memuat data kursus.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => { active = false; };
+  }, [path, onError]);
+
+  const handleFreeEnroll = async () => {
+    if (!course) return;
+    setSubmitting(true);
+    onError('');
+    try {
+      const sb = requireSupabase();
+      try {
+        await sb.rpc('enroll_lms_free_course', { p_course_slug: course.slug });
+      } catch {}
+      const { data: userData } = await sb.auth.getUser();
+      if (userData?.user?.id) {
+        await sb.from('enrollments').upsert({
+          user_id: userData.user.id,
+          course_id: course.id,
+          status: 'active',
+          activated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,course_id' });
+      }
+      onNavigate('/belajar/' + course.slug);
+    } catch (err: any) {
+      onError(err?.message || 'Gagal mengaktifkan kelas gratis.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMayarCheckout = async () => {
+    if (!course) return;
+    setSubmitting(true);
+    onError('');
+    setMayarError(null);
+    try {
+      const sb = requireSupabase();
+      const order = await sb.rpc('create_lms_order', { p_course_slug: course.slug });
+      if (order.error) throw new Error(order.error.message);
+
+      const { data: sessionData } = await sb.auth.getSession();
+      const endpoint = import.meta.env.VITE_MAYAR_CHECKOUT_ENDPOINT || '/api/mayar/create-checkout';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + (sessionData.session?.access_token || '')
+        },
+        body: JSON.stringify({ orderId: order.data.id })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.checkoutUrl) {
+        throw new Error(result.message || 'Payment gateway Mayar sedang tahap verifikasi.');
+      }
+      window.location.assign(result.checkoutUrl);
+    } catch (submitError: any) {
+      const msg = submitError?.message || 'Checkout Mayar belum aktif.';
+      setMayarError(msg);
+      onError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWhatsAppConfirmation = async () => {
+    if (!course) return;
+    try {
+      const sb = requireSupabase();
+      await sb.rpc('create_lms_order', { p_course_slug: course.slug });
+    } catch {}
+
+    const pjRaw = course.pj_contact || '081282218903';
+    let cleanPhone = pjRaw.replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
+    if (!cleanPhone.startsWith('62')) cleanPhone = '6281282218903';
+
+    const pjName = course.pj_name || 'Admin Pusat Al Madraj';
+    const userName = currentProfile?.full_name || currentUser?.user_metadata?.full_name || 'Santri/Mahasiswa';
+    const userEmail = currentUser?.email || '-';
+
+    const waText = `Assalamu'alaikum Warahmatullahi Wabarakatuh Kak ${pjName},\n\nSaya ingin mendaftar & aktivasi program Bimbel/Maddah:\n*${course.title}*\nBiaya: ${money(course.price)}\n\n*Data Akun Web:* \n- Nama: ${userName}\n- Email: ${userEmail}\n\nMohon info nomor rekening / QRIS pembayaran dan aktivasi akses kelas saya di website Al Madraj (almadraj-edu.com).\n\nJazakumullah khairan.`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  if (loading || !course) return <PublicLoading />;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+      {/* Left Column: Course Overview */}
+      <section className="rounded-2xl border border-[#dce9df] bg-white p-6 sm:p-8">
+        <button onClick={() => onNavigate('/kelas/' + course.slug)} className="flex items-center gap-2 text-sm font-semibold text-[#607568] hover:text-[#006d77]">
+          <ArrowLeft className="h-4 w-4" /> Kembali ke detail kelas
+        </button>
+
+        <p className="mt-8 text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">
+          {course.price === 0 ? 'Akses Gratis' : 'Pendaftaran & Checkout'}
+        </p>
+        <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-[#17382c]">{course.title}</h1>
+        {course.summary && <p className="mt-3 text-sm leading-relaxed text-[#607568]">{course.summary}</p>}
+
+        <div className="mt-6 border-t border-[#e1eee4] pt-5 space-y-3">
+          <Summary label="Format Pembelajaran" value={course.media_format === 'audio' ? '🎧 Audio Bimbel & Foto Saburah' : course.media_format === 'hybrid' ? '🎧 Audio + 🎬 Video' : '🎬 Video Dars & Bahasan'} />
+          <Summary label="Fakultas / Maddah" value={course.faculty || 'Al-Azhar'} />
+          <Summary label="Pengampu / Tutor" value={course.tutor || 'Asatidz Al Madraj'} />
+          {course.pj_name && <Summary label="Koordinator Maddah (PJ)" value={`${course.pj_name} (${course.pj_contact || 'WhatsApp'})`} />}
+          <Summary label="Akun Terdaftar" value={currentUser?.email || 'Akun Google'} />
+          <Summary label="Total Investasi" value={course.price === 0 ? 'Gratis (Rp 0)' : money(course.price)} strong />
+        </div>
+
+        {hasActiveAccess && (
+          <div className="mt-6 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <CheckCircle2 className="h-5 w-5 text-emerald-700 shrink-0" />
+              <span>Akun Anda telah terdaftar aktif pada kelas ini!</span>
+            </div>
+            <button
+              onClick={() => onNavigate('/belajar/' + course.slug)}
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white hover:bg-[#005a63]"
+            >
+              Buka Ruang Belajar Sekarang <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Right Column: Payment & Activation Methods */}
+      <section className="rounded-2xl bg-[#102c22] p-6 text-white sm:p-8 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">
+              {course.price === 0 ? 'Program Terbuka' : 'Metode Aktivasi'}
+            </p>
+            {course.price > 0 && (
+              <span className="rounded-full bg-[#83c5be]/20 px-2.5 py-0.5 text-[11px] font-semibold text-[#83c5be]">
+                Akses Terjamin
+              </span>
+            )}
+          </div>
+
+          <h2 className="mt-3 text-2xl font-bold">
+            {course.price === 0 ? 'Mulai Belajar Sekarang' : 'Aktivasi Akses Kelas'}
+          </h2>
+
+          {course.price === 0 ? (
+            <div className="mt-4 space-y-4">
+              <p className="text-sm leading-6 text-[#c5d9cf]">
+                Program ini berstatus <span className="font-bold text-white">Gratis</span>. Anda dapat langsung membuka materi audio/video, foto papan tulis, dan modul tanpa pembayaran.
+              </p>
+              <button
+                disabled={submitting}
+                onClick={handleFreeEnroll}
+                className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#83c5be] px-5 text-sm font-bold text-[#102c22] shadow-lg hover:bg-white active:scale-95 transition cursor-pointer"
+              >
+                {submitting ? 'Menyiapkan akses...' : 'Aktifkan Akses Gratis Sekarang'}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-5">
+              {/* Primary Option: WhatsApp Confirmation (Fastest & Guaranteed) */}
+              <div className="rounded-xl border border-[#83c5be]/30 bg-white/5 p-4 backdrop-blur-xs">
+                <div className="flex items-center gap-2 text-[#83c5be] font-bold text-xs uppercase tracking-wider">
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Rekomendasi Cepat: Konfirmasi via PJ / Admin</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-[#c5d9cf]">
+                  Hubungi Penanggung Jawab (PJ) Maddah atau Admin via WhatsApp untuk menerima nomor rekening transfer/QRIS, kirim bukti bayar, dan akses akun langsung diaktifkan.
+                </p>
+                {course.pj_name && (
+                  <div className="mt-3 rounded-lg bg-black/20 p-2.5 text-xs text-[#a9cfbe]">
+                    <p className="font-semibold text-white">PJ Maddah: {course.pj_name}</p>
+                    <p className="mt-0.5 font-mono text-[11px]">{course.pj_contact || 'WhatsApp Admin'}</p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleWhatsAppConfirmation}
+                  className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#20bd5a] active:scale-95 transition cursor-pointer"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Daftar &amp; Konfirmasi via WhatsApp</span>
+                </button>
+              </div>
+
+              {/* Secondary Option: Mayar Payment Gateway Notice */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs leading-relaxed text-[#a0baae]">
+                <div className="flex items-center justify-between text-[#83c5be] font-semibold mb-1">
+                  <span>Pembayaran Otomatis (Mayar)</span>
+                  <span className="text-[10px] rounded bg-amber-400/20 text-amber-300 px-1.5 py-0.5">Tahap Verifikasi</span>
+                </div>
+                <p>
+                  Gateway pembayaran instan (QRIS, VA, E-Wallet) sedang dalam integrasi final. Jika tombol di bawah belum dapat memproses, silakan gunakan konfirmasi WhatsApp di atas.
+                </p>
+                {mayarError && (
+                  <p className="mt-2 text-amber-300 font-medium">
+                    ⚠️ {mayarError} (Gunakan WhatsApp di atas)
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleMayarCheckout}
+                  className="mt-3 flex min-h-9 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 text-xs font-semibold text-white hover:bg-white/10 active:scale-95 transition cursor-pointer"
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-[#83c5be]" />
+                  <span>{submitting ? 'Menghubungkan ke Mayar...' : 'Coba Bayar Otomatis Mayar'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 border-t border-white/10 pt-4 text-[11px] text-[#7ea090] flex items-center justify-between">
+          <span>Official LMS Al Madraj · Kairo</span>
+          <span>Bimbel Muqarrar Al-Azhar</span>
+        </div>
+      </section>
+    </div>
+  );
+};
 
 const LearningRoute = ({ path, user, onNavigate, onError }: { path: string; user: { id: string }; onNavigate: (path: string) => void; onError: (message: string) => void }) => { const [course, setCourse] = useState<Course | null>(null); const [lessons, setLessons] = useState<Lesson[]>([]); const [completed, setCompleted] = useState<string[]>([]); const [activeLesson, setActiveLesson] = useState<Lesson | null>(null); useEffect(() => { const load = async () => { const sb = requireSupabase(); const slug = path.split('/')[2]; const courseResult = await sb.from('courses').select('*').eq('slug', slug).single(); if (!courseResult.data) return; setCourse(courseResult.data); const lessonsResult = await sb.from('lessons').select('id,course_id,title,content_type,duration,sort_order').eq('course_id', courseResult.data.id).eq('is_published', true).order('sort_order'); setLessons(lessonsResult.data || []); const progressResult = await sb.from('lesson_progress').select('lesson_id').eq('user_id', user.id); setCompleted((progressResult.data || []).map((item: { lesson_id: string }) => item.lesson_id)); }; load().catch((loadError) => onError(loadError instanceof Error ? loadError.message : 'Materi gagal dimuat.')); }, [path, user.id, onError]); const toggle = async (lesson: Lesson) => { const sb = requireSupabase(); try { if (completed.includes(lesson.id)) { await sb.from('lesson_progress').delete().eq('user_id', user.id).eq('lesson_id', lesson.id); setCompleted((items) => items.filter((item) => item !== lesson.id)); } else { const result = await sb.from('lesson_progress').upsert({ user_id: user.id, lesson_id: lesson.id }); if (result.error) throw new Error(result.error.message); setCompleted((items) => [...items, lesson.id]); } } catch (toggleError) { onError(toggleError instanceof Error ? toggleError.message : 'Progress gagal disimpan.'); } }; if (!course) return <PublicLoading />; return <BackendShell profile={null} onNavigate={onNavigate} onLogout={() => undefined}><div className="space-y-6"><button onClick={() => onNavigate('/dashboard')} className="flex items-center gap-2 text-sm font-semibold text-[#607568]"><ArrowLeft className="h-4 w-4" /> Kembali ke dashboard</button><section className="rounded-2xl bg-[#102c22] p-6 text-white sm:p-9"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">Ruang belajar</p><h1 className="mt-3 text-3xl font-semibold sm:text-5xl">{course.title}</h1><div className="mt-6 flex justify-between text-xs text-[#b7d0c3]"><span>Progress tersimpan di database</span><span>{completed.length}/{lessons.length} selesai</span></div><div className="mt-2 h-2 rounded-full bg-white/15"><div className="h-2 rounded-full bg-[#83c5be]" style={{ width: (completed.length / Math.max(lessons.length, 1)) * 100 + '%' }} /></div></section><section className="rounded-2xl border border-[#dce9df] bg-white p-6 sm:p-8"><div className="flex items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Materi pertemuan</p><h2 className="mt-2 text-2xl font-semibold">{lessons.length} materi tersedia</h2></div></div><div className="mt-6 divide-y divide-[#e1eee4]">{lessons.map((lesson) => <div key={lesson.id} className="flex items-center justify-between gap-4 py-4"><div className="flex min-w-0 items-center gap-3"><button onClick={() => toggle(lesson)} aria-label="Tandai selesai" className={'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ' + (completed.includes(lesson.id) ? 'border-[#006d77] bg-[#006d77] text-white' : 'border-[#cfe0d5] text-[#799083]')}>{completed.includes(lesson.id) && <Check className="h-4 w-4" />}</button><div><p className="text-sm font-semibold">{lesson.title}</p><p className="mt-1 text-xs text-[#799083]">{lesson.content_type} · {lesson.duration}</p></div></div><button onClick={() => setActiveLesson(lesson)} className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfe0d5] text-[#006d77]" aria-label="Buka materi">{lesson.content_type === 'video' ? <CirclePlay className="h-4 w-4" /> : <FileText className="h-4 w-4" />}</button></div>)}</div></section>{activeLesson && <ProductionContentModal lesson={activeLesson} onClose={() => setActiveLesson(null)} />}</div></BackendShell>; };
 
@@ -4312,8 +4585,37 @@ type ProductionAdminProgress = LessonProgress & { user_id: string };
 
 const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: string) => void; user?: { id: string; email?: string } | null; profile?: Profile | null }) => {
   type Tab = 'overview' | 'classes' | 'materials' | 'participants' | 'access' | 'progress' | 'transactions';
-  type CourseDraft = { id?: string; slug: string; title: string; program_type: ProgramType; faculty: string; summary: string; tutor: string; schedule: string; duration: string; price: string; is_published: boolean };
-  type LessonDraft = { id?: string; course_id: string; title: string; content_type: Lesson['content_type']; duration: string; content_url: string; sort_order: string; is_published: boolean };
+  type CourseDraft = {
+    id?: string;
+    slug: string;
+    title: string;
+    program_type: ProgramType;
+    faculty: string;
+    summary: string;
+    tutor: string;
+    schedule: string;
+    duration: string;
+    price: string;
+    is_published: boolean;
+    pj_name?: string;
+    pj_contact?: string;
+    pj_email?: string;
+    media_format?: 'video' | 'audio' | 'hybrid';
+    modul_url?: string;
+    has_certificate?: boolean;
+  };
+  type LessonDraft = {
+    id?: string;
+    course_id: string;
+    title: string;
+    content_type: Lesson['content_type'];
+    duration: string;
+    content_url: string;
+    sort_order: string;
+    is_published: boolean;
+    teacher_notes?: string;
+    board_photos?: string;
+  };
   const [tab, setTab] = useState<Tab>('overview');
   const [courses, setCourses] = useState<ProductionAdminCourse[]>([]);
   const [lessons, setLessons] = useState<ProductionAdminLesson[]>([]);
@@ -4363,9 +4665,15 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     setLoading(true);
     try {
       const sb = requireSupabase();
+      let lessonPromise = sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order,is_published,teacher_notes,board_photos').order('sort_order');
       const [courseResult, lessonResult, profileResult, enrollmentResult, orderResult, progressResult] = await Promise.all([
         sb.from('courses').select('*').order('created_at', { ascending: false }),
-        sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order,is_published').order('sort_order'),
+        lessonPromise.then(async (res) => {
+          if (res.error) {
+            return sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order,is_published').order('sort_order');
+          }
+          return res;
+        }),
         sb.from('profiles').select('id,full_name,whatsapp,role').order('created_at', { ascending: false }),
         sb.from('enrollments').select('id,user_id,course_id,status,created_at,activated_at,profiles(id,full_name,whatsapp,role),courses(title,slug)').order('created_at', { ascending: false }),
         sb.from('orders').select('id,amount,status,provider,created_at,profiles(full_name),courses(title)').order('created_at', { ascending: false }),
@@ -4399,8 +4707,68 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     await requireSupabase().from('admin_audit_logs').insert({ action, entity_type: entityType, entity_id: entityId || null, metadata });
   };
 
-  const startCourse = (course?: ProductionAdminCourse) => setCourseDraft(course ? { id: course.id, slug: course.slug, title: course.title, program_type: course.program_type || 'Dars', faculty: course.faculty, summary: course.summary, tutor: course.tutor, schedule: course.schedule, duration: course.duration, price: String(course.price), is_published: course.is_published } : { slug: '', title: '', program_type: 'Dars', faculty: '', summary: '', tutor: '', schedule: '', duration: '', price: '0', is_published: false });
-  const startLesson = (lesson?: ProductionAdminLesson) => { setContentFile(null); setLessonDraft(lesson ? { id: lesson.id, course_id: lesson.course_id, title: lesson.title, content_type: lesson.content_type, duration: lesson.duration, content_url: lesson.content_url || '', sort_order: String(lesson.sort_order), is_published: lesson.is_published } : { course_id: selectedCourseId, title: '', content_type: 'video', duration: '', content_url: '', sort_order: String(lessons.filter((item) => item.course_id === selectedCourseId).length + 1), is_published: false }); };
+  const startCourse = (course?: ProductionAdminCourse) => setCourseDraft(course ? {
+    id: course.id,
+    slug: course.slug,
+    title: course.title,
+    program_type: course.program_type || 'Dars',
+    faculty: course.faculty,
+    summary: course.summary,
+    tutor: course.tutor,
+    schedule: course.schedule,
+    duration: course.duration,
+    price: String(course.price),
+    is_published: course.is_published,
+    pj_name: course.pj_name || '',
+    pj_contact: course.pj_contact || '',
+    pj_email: course.pj_email || '',
+    media_format: course.media_format || (course.program_type === 'Bimbel' ? 'audio' : 'video'),
+    modul_url: course.modul_url || '',
+    has_certificate: course.has_certificate ?? true,
+  } : {
+    slug: '',
+    title: '',
+    program_type: 'Dars',
+    faculty: '',
+    summary: '',
+    tutor: '',
+    schedule: '',
+    duration: '',
+    price: '0',
+    is_published: false,
+    pj_name: '',
+    pj_contact: '',
+    pj_email: '',
+    media_format: 'audio',
+    modul_url: '',
+    has_certificate: true,
+  });
+
+  const startLesson = (lesson?: ProductionAdminLesson) => {
+    setContentFile(null);
+    setLessonDraft(lesson ? {
+      id: lesson.id,
+      course_id: lesson.course_id,
+      title: lesson.title,
+      content_type: lesson.content_type,
+      duration: lesson.duration,
+      content_url: lesson.content_url || '',
+      sort_order: String(lesson.sort_order),
+      is_published: lesson.is_published,
+      teacher_notes: lesson.teacher_notes || '',
+      board_photos: (lesson.board_photos || []).join('\n'),
+    } : {
+      course_id: selectedCourseId,
+      title: '',
+      content_type: 'audio',
+      duration: '',
+      content_url: '',
+      sort_order: String(lessons.filter((item) => item.course_id === selectedCourseId).length + 1),
+      is_published: false,
+      teacher_notes: '',
+      board_photos: '',
+    });
+  };
 
   const saveCourse = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -4412,10 +4780,50 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     if (courseDraft.is_published && [courseDraft.faculty, courseDraft.summary, courseDraft.tutor, courseDraft.schedule, courseDraft.duration].some((value) => !value.trim())) { onError('Fakultas, ringkasan, tutor, jadwal, dan durasi wajib lengkap sebelum kelas dipublikasikan.'); return; }
     setSaving(true);
     try {
-      const payload = { slug: normalizedSlug, title: courseDraft.title.trim(), program_type: courseDraft.program_type || 'Dars', faculty: courseDraft.faculty.trim(), summary: courseDraft.summary.trim(), tutor: courseDraft.tutor.trim(), schedule: courseDraft.schedule.trim(), duration: courseDraft.duration.trim(), price: parsedPrice, is_published: courseDraft.is_published, updated_at: new Date().toISOString() };
-      const result = courseDraft.id ? await requireSupabase().from('courses').update(payload).eq('id', courseDraft.id) : await requireSupabase().from('courses').insert(payload);
-      if (result.error) throw new Error(result.error.message);
-      await recordAudit(courseDraft.id ? 'course.updated' : 'course.created', 'course', courseDraft.id, { slug: payload.slug });
+      const fullPayload = {
+        slug: normalizedSlug,
+        title: courseDraft.title.trim(),
+        program_type: courseDraft.program_type || 'Dars',
+        faculty: courseDraft.faculty.trim(),
+        summary: courseDraft.summary.trim(),
+        tutor: courseDraft.tutor.trim(),
+        schedule: courseDraft.schedule.trim(),
+        duration: courseDraft.duration.trim(),
+        price: parsedPrice,
+        is_published: courseDraft.is_published,
+        pj_name: courseDraft.pj_name?.trim() || '',
+        pj_contact: courseDraft.pj_contact?.trim() || '',
+        pj_email: courseDraft.pj_email?.trim() || '',
+        media_format: courseDraft.media_format || (courseDraft.program_type === 'Bimbel' ? 'audio' : 'video'),
+        modul_url: courseDraft.modul_url?.trim() || '',
+        has_certificate: courseDraft.has_certificate ?? true,
+        updated_at: new Date().toISOString(),
+      };
+      let result = courseDraft.id
+        ? await requireSupabase().from('courses').update(fullPayload).eq('id', courseDraft.id)
+        : await requireSupabase().from('courses').insert(fullPayload);
+
+      if (result.error) {
+        // Fallback in case schema migration has not run yet in user's Supabase
+        const basePayload = {
+          slug: normalizedSlug,
+          title: courseDraft.title.trim(),
+          program_type: courseDraft.program_type || 'Dars',
+          faculty: courseDraft.faculty.trim(),
+          summary: courseDraft.summary.trim(),
+          tutor: courseDraft.tutor.trim(),
+          schedule: courseDraft.schedule.trim(),
+          duration: courseDraft.duration.trim(),
+          price: parsedPrice,
+          is_published: courseDraft.is_published,
+          updated_at: new Date().toISOString(),
+        };
+        result = courseDraft.id
+          ? await requireSupabase().from('courses').update(basePayload).eq('id', courseDraft.id)
+          : await requireSupabase().from('courses').insert(basePayload);
+        if (result.error) throw new Error(result.error.message);
+      }
+      await recordAudit(courseDraft.id ? 'course.updated' : 'course.created', 'course', courseDraft.id, { slug: normalizedSlug });
       setCourseDraft(null);
       await loadData();
     } catch (saveError) { onError(saveError instanceof Error ? saveError.message : 'Kelas gagal disimpan.'); } finally { setSaving(false); }
@@ -4437,10 +4845,44 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         if (upload.error) throw new Error(upload.error.message);
         contentUrl = upload.data.path;
       }
-      const payload = { course_id: lessonDraft.course_id, title: lessonDraft.title.trim(), content_type: lessonDraft.content_type, duration: lessonDraft.duration.trim(), content_url: contentUrl, sort_order: sortOrder, is_published: lessonDraft.is_published };
-      const result = lessonDraft.id ? await requireSupabase().from('lessons').update(payload).eq('id', lessonDraft.id) : await requireSupabase().from('lessons').insert(payload);
-      if (result.error) throw new Error(result.error.message);
-      await recordAudit(lessonDraft.id ? 'lesson.updated' : 'lesson.created', 'lesson', lessonDraft.id, { course_id: payload.course_id, content_type: payload.content_type });
+      const rawPhotos = (lessonDraft.board_photos || '')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const fullPayload = {
+        course_id: lessonDraft.course_id,
+        title: lessonDraft.title.trim(),
+        content_type: lessonDraft.content_type,
+        duration: lessonDraft.duration.trim(),
+        content_url: contentUrl,
+        sort_order: sortOrder,
+        is_published: lessonDraft.is_published,
+        teacher_notes: lessonDraft.teacher_notes?.trim() || '',
+        board_photos: rawPhotos,
+      };
+
+      let result = lessonDraft.id
+        ? await requireSupabase().from('lessons').update(fullPayload).eq('id', lessonDraft.id)
+        : await requireSupabase().from('lessons').insert(fullPayload);
+
+      if (result.error) {
+        // Fallback in case schema migration has not run yet in user's Supabase
+        const basePayload = {
+          course_id: lessonDraft.course_id,
+          title: lessonDraft.title.trim(),
+          content_type: lessonDraft.content_type,
+          duration: lessonDraft.duration.trim(),
+          content_url: contentUrl,
+          sort_order: sortOrder,
+          is_published: lessonDraft.is_published,
+        };
+        result = lessonDraft.id
+          ? await requireSupabase().from('lessons').update(basePayload).eq('id', lessonDraft.id)
+          : await requireSupabase().from('lessons').insert(basePayload);
+        if (result.error) throw new Error(result.error.message);
+      }
+      await recordAudit(lessonDraft.id ? 'lesson.updated' : 'lesson.created', 'lesson', lessonDraft.id, { course_id: lessonDraft.course_id, content_type: lessonDraft.content_type });
       setLessonDraft(null);
       await loadData();
     } catch (saveError) { onError(saveError instanceof Error ? saveError.message : 'Materi gagal disimpan.'); } finally { setSaving(false); }
@@ -4470,7 +4912,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   });
   const tabs: { id: Tab; label: string }[] = [{ id: 'overview', label: 'Ringkasan' }, { id: 'classes', label: 'Kelas' }, { id: 'materials', label: 'Materi' }, { id: 'participants', label: 'Peserta' }, { id: 'access', label: 'Akses' }, { id: 'progress', label: 'Progress' }, { id: 'transactions', label: 'Transaksi' }];
 
-  return <div className="space-y-6"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Workspace pengelola</p><div className="mt-2 flex flex-wrap items-center gap-3"><h1 className="text-3xl font-semibold sm:text-5xl">Panel admin</h1><span className="rounded-full border border-[#006d77] bg-[#e5f4f2] px-3.5 py-1 text-xs font-bold text-[#006d77]">{isMaster ? ('Admin Master (Owner): ' + (user?.email || 'daru.fahma@gmail.com')) : 'Admin LMS'}</span></div><p className="mt-3 text-sm text-[#607568]">Kelola kelas, materi, peserta, hak akses admin/PJ, progress, dan transaksi dari database.</p></div><button onClick={() => void loadData()} className="flex min-h-10 items-center gap-2 self-start rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold text-[#607568]"><RefreshCw className="h-4 w-4" /> Muat ulang</button></div><nav className="flex gap-5 overflow-x-auto border-b border-[#dce9df]" aria-label="Menu admin">{tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={'min-h-11 shrink-0 border-b-2 px-1 text-sm font-semibold ' + (tab === item.id ? 'border-[#006d77] text-[#006d77]' : 'border-transparent text-[#819289]')}>{item.label}</button>)}</nav>{loading ? <p className="py-10 text-center text-sm text-[#607568]">Memuat data operasional...</p> : <>{tab === 'overview' && <div className="space-y-5"><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ProductionAdminStat label="Kelas published" value={String(publishedCourses)} detail="Dari database" /><ProductionAdminStat label="Materi" value={String(lessons.length)} detail="Video, PDF, teks" /><ProductionAdminStat label="Peserta aktif" value={String(activeEnrollments)} detail="Enrollment aktif" /><ProductionAdminStat label="Transaksi" value={String(orders.length)} detail="Order tercatat" /></section><section className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Kesehatan konten</p><h2 className="mt-2 text-xl font-semibold">Kelas dan materi</h2></div><BookOpen className="h-5 w-5 text-[#006d77]" /></div><div className="mt-5 divide-y divide-[#e4eee7]">{courses.map((course) => <div key={course.id} className="flex items-center justify-between gap-4 py-3"><div><p className="text-sm font-semibold">{course.title}</p><p className="mt-1 text-xs text-[#819289]">{lessons.filter((lesson) => lesson.course_id === course.id).length} materi · {course.is_published ? 'Published' : 'Draft'}</p></div><button onClick={() => { setSelectedCourseId(course.id); setTab('materials'); }} className="text-xs font-bold text-[#006d77]">Atur materi</button></div>)}</div></div><div className="rounded-[18px] bg-[#102c22] p-5 text-white"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">Aksi utama</p><h2 className="mt-2 text-xl font-semibold">Siapkan kelas untuk peserta.</h2><p className="mt-3 text-sm leading-6 text-[#c5d9cf]">Pastikan kelas published dan setiap video memiliki URL sebelum dibuka oleh peserta.</p><button onClick={() => setTab('classes')} className="mt-5 flex min-h-10 items-center gap-2 rounded-full bg-[#83c5be] px-4 text-sm font-bold text-[#102c22]">Kelola kelas <ArrowRight className="h-4 w-4" /></button></div></section></div>}{tab === 'classes' && <div className="space-y-5">{courseDraft && <ProductionAdminForm title={courseDraft.id ? 'Edit kelas' : 'Tambah kelas'} onClose={() => setCourseDraft(null)}><form onSubmit={saveCourse} className="grid gap-4 md:grid-cols-2"><ProductionAdminField label="Slug" value={courseDraft.slug} onChange={(value) => setCourseDraft({ ...courseDraft, slug: value })} placeholder="ushul-fiqh" /><ProductionAdminField label="Nama kelas" value={courseDraft.title} onChange={(value) => setCourseDraft({ ...courseDraft, title: value })} placeholder="Ushul Fiqh" /><ProductionAdminField label="Fakultas" value={courseDraft.faculty} onChange={(value) => setCourseDraft({ ...courseDraft, faculty: value })} placeholder="Syariah" /><ProductionAdminSelect label="Jenis program" value={courseDraft.program_type} onChange={(value) => setCourseDraft({ ...courseDraft, program_type: value as ProgramType })} options={["Dars", "Bimbel"]} /><ProductionAdminField label="Mentor" value={courseDraft.tutor} onChange={(value) => setCourseDraft({ ...courseDraft, tutor: value })} placeholder="Nama mentor" /><ProductionAdminField label="Jadwal" value={courseDraft.schedule} onChange={(value) => setCourseDraft({ ...courseDraft, schedule: value })} placeholder="Rabu, 20.00 WIB" /><ProductionAdminField label="Durasi" value={courseDraft.duration} onChange={(value) => setCourseDraft({ ...courseDraft, duration: value })} placeholder="14 pertemuan" /><ProductionAdminField label="Harga" type="number" value={courseDraft.price} onChange={(value) => setCourseDraft({ ...courseDraft, price: value })} placeholder="199000" /><label className="block md:col-span-2"><span className="mb-2 block text-sm font-semibold">Deskripsi</span><textarea value={courseDraft.summary} onChange={(event) => setCourseDraft({ ...courseDraft, summary: event.target.value })} rows={3} className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#006d77]" /></label><label className="flex items-center gap-2 text-sm font-semibold md:col-span-2"><input type="checkbox" checked={courseDraft.is_published} onChange={(event) => setCourseDraft({ ...courseDraft, is_published: event.target.checked })} /> Publish kelas</label><div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setCourseDraft(null)} className="min-h-10 rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold">Batal</button><button disabled={saving} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-4 text-sm font-bold text-white"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan kelas'}</button></div></form></ProductionAdminForm>}<section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Program belajar</p><h2 className="mt-2 text-xl font-semibold">{courses.length} kelas</h2></div><button onClick={() => startCourse()} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" />Tambah kelas</button></div><div className="mt-5 divide-y divide-[#e4eee7]">{courses.map((course) => <div key={course.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{course.title}</p><span className={'rounded-full px-2 py-1 text-[10px] font-bold ' + (course.is_published ? 'bg-[#e8f5ed] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{course.is_published ? 'Published' : 'Draft'}</span><span className="rounded-full bg-[#edf8f2] px-2 py-1 text-[10px] font-bold text-[#247d48]">{course.program_type || 'Dars'}</span></div><p className="mt-1 text-xs text-[#819289]">{course.slug} · {course.faculty} · Rp{course.price.toLocaleString('id-ID')}</p></div><div className="flex items-center gap-2"><button onClick={() => { setSelectedCourseId(course.id); setTab('materials'); }} className="min-h-9 rounded-full border border-[#cfe0d5] px-3 text-xs font-semibold">Materi</button><button onClick={() => startCourse(course)} aria-label="Edit kelas" title="Edit kelas" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#006d77]"><Pencil className="h-4 w-4" /></button><button onClick={() => void removeRow('courses', course.id, course.title)} aria-label="Hapus kelas" title="Hapus kelas" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#efd2c8] text-[#b36d4c]"><Trash2 className="h-4 w-4" /></button></div></div>)}</div></section></div>}{tab === 'materials' && <div className="space-y-5">{lessonDraft && <ProductionAdminForm title={lessonDraft.id ? 'Edit materi' : 'Tambah materi'} onClose={() => setLessonDraft(null)}><form onSubmit={saveLesson} className="grid gap-4 md:grid-cols-2"><ProductionAdminField label="Judul materi" value={lessonDraft.title} onChange={(value) => setLessonDraft({ ...lessonDraft, title: value })} placeholder="Judul pertemuan" /><ProductionAdminField label="Durasi" value={lessonDraft.duration} onChange={(value) => setLessonDraft({ ...lessonDraft, duration: value })} placeholder="28:15" /><label className="block"><span className="mb-2 block text-sm font-semibold">Kelas</span><select value={lessonDraft.course_id} onChange={(event) => setLessonDraft({ ...lessonDraft, course_id: event.target.value })} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-sm">{courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}</select></label><label className="block"><span className="mb-2 block text-sm font-semibold">Tipe materi</span><select value={lessonDraft.content_type} onChange={(event) => setLessonDraft({ ...lessonDraft, content_type: event.target.value as Lesson['content_type'] })} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-sm"><option value="video">Video</option><option value="pdf">PDF</option><option value="text">Teks</option></select></label><ProductionAdminField label="Urutan" type="number" value={lessonDraft.sort_order} onChange={(value) => setLessonDraft({ ...lessonDraft, sort_order: value })} placeholder="1" /><ProductionAdminField label="URL konten" value={lessonDraft.content_url} onChange={(value) => setLessonDraft({ ...lessonDraft, content_url: value })} placeholder="https://..." /><label className="flex items-center gap-2 text-sm font-semibold md:col-span-2"><input type="checkbox" checked={lessonDraft.is_published} onChange={(event) => setLessonDraft({ ...lessonDraft, is_published: event.target.checked })} /> Publish materi</label><div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setLessonDraft(null)} className="min-h-10 rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold">Batal</button><button disabled={saving} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-4 text-sm font-bold text-white"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan materi'}</button></div></form></ProductionAdminForm>}<section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Struktur materi</p><h2 className="mt-2 text-xl font-semibold">{selectedLessons.length} materi di {courses.find((course) => course.id === selectedCourseId)?.title || 'kelas'}</h2></div><div className="flex items-center gap-2"><select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)} className="min-h-10 max-w-[240px] rounded-xl border border-[#cbded0] bg-white px-3 text-sm">{courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}</select><button onClick={() => startLesson()} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-3 text-sm font-bold text-white"><Plus className="h-4 w-4" />Tambah</button></div></div><div className="mt-5 divide-y divide-[#e4eee7]">{selectedLessons.map((lesson) => <div key={lesson.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{lesson.title}</p><span className="text-xs uppercase text-[#819289]">{lesson.content_type} · {lesson.duration}</span><span className={'rounded-full px-2 py-1 text-[10px] font-bold ' + (lesson.is_published ? 'bg-[#e8f5ed] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{lesson.is_published ? 'Published' : 'Draft'}</span></div><p className="mt-1 truncate text-xs text-[#819289]">{lesson.content_url || 'URL konten belum diisi'}</p></div><div className="flex items-center gap-2"><button onClick={() => startLesson(lesson)} aria-label="Edit materi" title="Edit materi" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#006d77]"><Pencil className="h-4 w-4" /></button><button onClick={() => void removeRow('lessons', lesson.id, lesson.title)} aria-label="Hapus materi" title="Hapus materi" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#efd2c8] text-[#b36d4c]"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>{!selectedLessons.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada materi untuk kelas ini.</p>}</section></div>}{tab === 'participants' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Data peserta & pengelola</p><h2 className="mt-2 text-xl font-semibold">{profiles.length} akun terdaftar</h2></div><label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#cbded0] px-3"><Search className="h-4 w-4 text-[#819289]" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full min-w-0 text-sm outline-none sm:w-56" placeholder="Cari peserta" /></label></div><div className="mt-5 divide-y divide-[#e4eee7]">{filteredProfiles.map((itemProfile) => <div key={itemProfile.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{itemProfile.full_name || 'Tanpa nama'}</p><span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + (itemProfile.role === 'admin' ? 'bg-[#e5f4f2] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{itemProfile.role === 'admin' ? 'Admin / PJ' : 'Mahasiswa'}</span></div><p className="mt-1 text-xs text-[#819289]">{itemProfile.whatsapp || 'WhatsApp belum diisi'}</p></div><div className="flex items-center gap-3"><span className="text-xs text-[#819289]">{enrollments.filter((item) => item.user_id === itemProfile.id && item.status === 'active').length} kelas aktif</span>{isMaster && itemProfile.id !== user?.id && <button type="button" onClick={() => void toggleRole(itemProfile)} className={'min-h-8 rounded-full border px-3 text-xs font-semibold ' + (itemProfile.role === 'admin' ? 'border-[#efd2c8] text-[#b36d4c] hover:bg-red-50' : 'border-[#cfe0d5] text-[#006d77] hover:bg-[#e5f4f2]')}>{itemProfile.role === 'admin' ? 'Ubah ke Mahasiswa' : 'Jadikan Admin / PJ'}</button>}</div></div>)}</div></section>}{tab === 'access' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Kontrol akses</p><h2 className="mt-2 text-xl font-semibold">Enrollment peserta</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{enrollments.map((enrollment) => <div key={enrollment.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{enrollment.profiles?.full_name || enrollment.user_id}</p><p className="mt-1 text-xs text-[#819289]">{enrollment.courses?.title || enrollment.course_id} · {enrollment.status}</p></div><div className="flex gap-2">{enrollment.status !== 'active' && <button onClick={() => void updateAccess(enrollment, 'active')} className="min-h-9 rounded-full bg-[#006d77] px-3 text-xs font-bold text-white">Aktifkan</button>}{enrollment.status === 'active' && <button onClick={() => void updateAccess(enrollment, 'cancelled')} className="min-h-9 rounded-full border border-[#efd2c8] px-3 text-xs font-semibold text-[#b36d4c]">Cabut akses</button>}{enrollment.status === 'cancelled' && <button onClick={() => void updateAccess(enrollment, 'active')} className="min-h-9 rounded-full border border-[#cfe0d5] px-3 text-xs font-semibold text-[#006d77]">Pulihkan</button>}</div></div>)}</div>{!enrollments.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada enrollment peserta.</p>}</section>}{tab === 'progress' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Monitoring belajar</p><h2 className="mt-2 text-xl font-semibold">Progress per kelas</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{progressByCourse.map((item) => <div key={item.course.id} className="py-4"><div className="flex items-center justify-between gap-4"><div><p className="font-semibold">{item.course.title}</p><p className="mt-1 text-xs text-[#819289]">{item.enrolled} peserta aktif · {item.complete} materi selesai</p></div><span className="font-bold text-[#006d77]">{item.percent}%</span></div><div className="mt-3 h-2 rounded-full bg-[#e3eee6]"><div className="h-2 rounded-full bg-[#006d77]" style={{ width: item.percent + '%' }} /></div></div>)}</div></section>}{tab === 'transactions' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Pembayaran</p><h2 className="mt-2 text-xl font-semibold">Riwayat transaksi</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{orders.map((order) => <div key={order.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{order.profiles?.full_name || 'Peserta'}</p><p className="mt-1 text-xs text-[#819289]">{order.courses?.title || '-'} · {order.provider}</p></div><div className="text-left sm:text-right"><p className="font-semibold text-[#006d77]">Rp{order.amount.toLocaleString('id-ID')}</p><p className="mt-1 text-xs uppercase text-[#819289]">{order.status}</p></div></div>)}</div>{!orders.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada transaksi.</p>}</section>}</>}</div>;
+  return <div className="space-y-6"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Workspace pengelola</p><div className="mt-2 flex flex-wrap items-center gap-3"><h1 className="text-3xl font-semibold sm:text-5xl">Panel admin</h1><span className="rounded-full border border-[#006d77] bg-[#e5f4f2] px-3.5 py-1 text-xs font-bold text-[#006d77]">{isMaster ? ('Admin Master (Owner): ' + (user?.email || 'daru.fahma@gmail.com')) : 'Admin LMS'}</span></div><p className="mt-3 text-sm text-[#607568]">Kelola kelas, materi, penunjukan PJ per maddah, peserta, progress, dan transaksi dari database.</p></div><button onClick={() => void loadData()} className="flex min-h-10 items-center gap-2 self-start rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold text-[#607568]"><RefreshCw className="h-4 w-4" /> Muat ulang</button></div><nav className="flex gap-5 overflow-x-auto border-b border-[#dce9df]" aria-label="Menu admin">{tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={'min-h-11 shrink-0 border-b-2 px-1 text-sm font-semibold ' + (tab === item.id ? 'border-[#006d77] text-[#006d77]' : 'border-transparent text-[#819289]')}>{item.label}</button>)}</nav>{loading ? <p className="py-10 text-center text-sm text-[#607568]">Memuat data operasional...</p> : <>{tab === 'overview' && <div className="space-y-5"><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ProductionAdminStat label="Kelas published" value={String(publishedCourses)} detail="Dari database" /><ProductionAdminStat label="Materi" value={String(lessons.length)} detail="Audio, Video, PDF" /><ProductionAdminStat label="Peserta aktif" value={String(activeEnrollments)} detail="Enrollment aktif" /><ProductionAdminStat label="Transaksi" value={String(orders.length)} detail="Order tercatat" /></section><section className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Kesehatan konten</p><h2 className="mt-2 text-xl font-semibold">Kelas dan materi</h2></div><BookOpen className="h-5 w-5 text-[#006d77]" /></div><div className="mt-5 divide-y divide-[#e4eee7]">{courses.map((course) => <div key={course.id} className="flex items-center justify-between gap-4 py-3"><div><p className="text-sm font-semibold">{course.title}</p><p className="mt-1 text-xs text-[#819289]">{lessons.filter((lesson) => lesson.course_id === course.id).length} materi · {course.is_published ? 'Published' : 'Draft'}{course.pj_name ? ` · PJ: ${course.pj_name}` : ''}</p></div><button onClick={() => { setSelectedCourseId(course.id); setTab('materials'); }} className="text-xs font-bold text-[#006d77]">Atur materi</button></div>)}</div></div><div className="rounded-[18px] bg-[#102c22] p-5 text-white"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">Aksi utama</p><h2 className="mt-2 text-xl font-semibold">Siapkan kelas untuk peserta.</h2><p className="mt-3 text-sm leading-6 text-[#c5d9cf]">Tunjuk PJ per maddah bimbel, upload link audio/video dari Google Drive, dan tambahkan foto papan tulis serta diktat PDF.</p><button onClick={() => setTab('classes')} className="mt-5 flex min-h-10 items-center gap-2 rounded-full bg-[#83c5be] px-4 text-sm font-bold text-[#102c22]">Kelola kelas <ArrowRight className="h-4 w-4" /></button></div></section></div>}{tab === 'classes' && <div className="space-y-5">{courseDraft && <ProductionAdminForm title={courseDraft.id ? 'Edit kelas & PJ Maddah' : 'Tambah kelas & PJ Maddah'} onClose={() => setCourseDraft(null)}><form onSubmit={saveCourse} className="grid gap-4 md:grid-cols-2"><ProductionAdminField label="Slug" value={courseDraft.slug} onChange={(value) => setCourseDraft({ ...courseDraft, slug: value })} placeholder="ushul-fiqh" /><ProductionAdminField label="Nama kelas / Maddah" value={courseDraft.title} onChange={(value) => setCourseDraft({ ...courseDraft, title: value })} placeholder="Ushul Fiqh (Bimbel)" /><ProductionAdminField label="Fakultas" value={courseDraft.faculty} onChange={(value) => setCourseDraft({ ...courseDraft, faculty: value })} placeholder="Syariah / Ushuluddin" /><ProductionAdminSelect label="Jenis program" value={courseDraft.program_type} onChange={(value) => setCourseDraft({ ...courseDraft, program_type: value as ProgramType })} options={["Bimbel", "Dars"]} /><ProductionAdminSelect label="Format Media" value={courseDraft.media_format || 'audio'} onChange={(value) => setCourseDraft({ ...courseDraft, media_format: value as any })} options={["audio", "video", "hybrid"]} /><ProductionAdminField label="Syaikh / Pengampu Dars" value={courseDraft.tutor} onChange={(value) => setCourseDraft({ ...courseDraft, tutor: value })} placeholder="Dr. Syaikh Ahmad..." /><div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 md:col-span-2"><p className="text-xs font-bold uppercase tracking-wider text-[#006d77] mb-3">Penanggung Jawab (PJ) Maddah Bimbel</p><div className="grid gap-3 sm:grid-cols-3"><ProductionAdminField label="Nama PJ Maddah" value={courseDraft.pj_name || ''} onChange={(value) => setCourseDraft({ ...courseDraft, pj_name: value })} placeholder="Ahmad (Koordinator)" /><ProductionAdminField label="Kontak WhatsApp PJ" value={courseDraft.pj_contact || ''} onChange={(value) => setCourseDraft({ ...courseDraft, pj_contact: value })} placeholder="0812xxxxxxxx" /><ProductionAdminField label="Email Akun PJ (Akses Edit)" value={courseDraft.pj_email || ''} onChange={(value) => setCourseDraft({ ...courseDraft, pj_email: value })} placeholder="pj.maddah@gmail.com" /></div><p className="mt-2 text-[11px] text-gray-500">PJ yang ditunjuk otomatis dapat mengedit materi, foto papan tulis, dan catatan guru untuk kelas ini.</p></div><ProductionAdminField label="Jadwal" value={courseDraft.schedule} onChange={(value) => setCourseDraft({ ...courseDraft, schedule: value })} placeholder="Rabu, 20.00 WIB" /><ProductionAdminField label="Durasi / Jumlah Pertemuan" value={courseDraft.duration} onChange={(value) => setCourseDraft({ ...courseDraft, duration: value })} placeholder="14 pertemuan" /><ProductionAdminField label="Harga (Rp)" type="number" value={courseDraft.price} onChange={(value) => setCourseDraft({ ...courseDraft, price: value })} placeholder="0 (gratis) atau 199000" /><ProductionAdminField label="Link Diktat / Modul PDF" value={courseDraft.modul_url || ''} onChange={(value) => setCourseDraft({ ...courseDraft, modul_url: value })} placeholder="https://drive.google.com/... atau link PDF" /><label className="block md:col-span-2"><span className="mb-2 block text-sm font-semibold">Deskripsi &amp; Ringkasan Maddah</span><textarea value={courseDraft.summary} onChange={(event) => setCourseDraft({ ...courseDraft, summary: event.target.value })} rows={3} className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#006d77]" /></label><div className="flex flex-wrap items-center gap-6 md:col-span-2"><label className="flex items-center gap-2 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={courseDraft.is_published} onChange={(event) => setCourseDraft({ ...courseDraft, is_published: event.target.checked })} /> Publish kelas</label><label className="flex items-center gap-2 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={courseDraft.has_certificate ?? true} onChange={(event) => setCourseDraft({ ...courseDraft, has_certificate: event.target.checked })} /> Sediakan Syahadah Khatam (Sertifikat)</label></div><div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setCourseDraft(null)} className="min-h-10 rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold cursor-pointer">Batal</button><button disabled={saving} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white hover:bg-[#00565e] cursor-pointer"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan kelas & PJ'}</button></div></form></ProductionAdminForm>}<section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Program belajar</p><h2 className="mt-2 text-xl font-semibold">{courses.length} kelas</h2></div><button onClick={() => startCourse()} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-4 text-sm font-bold text-white cursor-pointer"><Plus className="h-4 w-4" />Tambah kelas</button></div><div className="mt-5 divide-y divide-[#e4eee7]">{courses.map((course) => <div key={course.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{course.title}</p><span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + (course.is_published ? 'bg-[#e8f5ed] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{course.is_published ? 'Published' : 'Draft'}</span><span className="rounded-full bg-[#edf8f2] px-2 py-0.5 text-[10px] font-bold text-[#247d48]">{course.program_type || 'Dars'}</span><span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-800 border border-cyan-200 uppercase">{course.media_format || 'audio'}</span>{course.pj_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">PJ: {course.pj_name}</span>}</div><p className="mt-1 text-xs text-[#819289]">{course.slug} · {course.faculty} · {course.price === 0 ? 'Gratis' : `Rp${course.price.toLocaleString('id-ID')}`}{course.modul_url ? ' · 📚 Modul PDF siap' : ''}</p></div><div className="flex items-center gap-2"><button onClick={() => { setSelectedCourseId(course.id); setTab('materials'); }} className="min-h-9 rounded-full border border-[#cfe0d5] px-3 text-xs font-semibold hover:border-[#006d77] hover:text-[#006d77] cursor-pointer">Materi</button><button onClick={() => startCourse(course)} aria-label="Edit kelas" title="Edit kelas" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#006d77] hover:bg-emerald-50 cursor-pointer"><Pencil className="h-4 w-4" /></button><button onClick={() => void removeRow('courses', course.id, course.title)} aria-label="Hapus kelas" title="Hapus kelas" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#efd2c8] text-[#b36d4c] hover:bg-red-50 cursor-pointer"><Trash2 className="h-4 w-4" /></button></div></div>)}</div></section></div>}{tab === 'materials' && <div className="space-y-5">{lessonDraft && <ProductionAdminForm title={lessonDraft.id ? 'Edit materi dars' : 'Tambah materi dars'} onClose={() => setLessonDraft(null)}><form onSubmit={saveLesson} className="grid gap-4 md:grid-cols-2"><ProductionAdminField label="Judul materi" value={lessonDraft.title} onChange={(value) => setLessonDraft({ ...lessonDraft, title: value })} placeholder="Contoh: Pertemuan 1 - Pengantar Ushul Fiqh" /><ProductionAdminField label="Durasi" value={lessonDraft.duration} onChange={(value) => setLessonDraft({ ...lessonDraft, duration: value })} placeholder="45:00" /><label className="block"><span className="mb-2 block text-sm font-semibold">Kelas</span><select value={lessonDraft.course_id} onChange={(event) => setLessonDraft({ ...lessonDraft, course_id: event.target.value })} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-sm">{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.program_type || 'Dars'})</option>)}</select></label><label className="block"><span className="mb-2 block text-sm font-semibold">Tipe materi</span><select value={lessonDraft.content_type} onChange={(event) => setLessonDraft({ ...lessonDraft, content_type: event.target.value as Lesson['content_type'] })} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-sm"><option value="audio">Audio (Bimbel Talaqqi)</option><option value="video">Video (Kajian Syarah)</option><option value="pdf">PDF (Diktat)</option><option value="text">Teks</option></select></label><ProductionAdminField label="Urutan" type="number" value={lessonDraft.sort_order} onChange={(value) => setLessonDraft({ ...lessonDraft, sort_order: value })} placeholder="1" /><div className="md:col-span-2"><ProductionAdminField label="URL konten (Google Drive Embed / YouTube / Audio URL)" value={lessonDraft.content_url} onChange={(value) => setLessonDraft({ ...lessonDraft, content_url: value })} placeholder="https://drive.google.com/file/d/.../view atau link YouTube" /><p className="mt-1 text-[11px] text-gray-500">Untuk materi audio dari Google Drive, tempelkan link share file Drive. Sistem otomatis mengubahnya menjadi preview embed yang dapat diputar.</p></div><label className="block md:col-span-2"><span className="mb-2 block text-sm font-semibold">Catatan Pengampu / Faedah Dars</span><textarea value={lessonDraft.teacher_notes || ''} onChange={(event) => setLessonDraft({ ...lessonDraft, teacher_notes: event.target.value })} rows={3} placeholder="Poin penting atau rujukan kitab..." className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#006d77]" /></label><label className="block md:col-span-2"><span className="mb-2 block text-sm font-semibold">Foto Papan Tulis (Saburah) - Masukkan URL per baris</span><textarea value={lessonDraft.board_photos || ''} onChange={(event) => setLessonDraft({ ...lessonDraft, board_photos: event.target.value })} rows={3} placeholder="https://drive.google.com/...\nhttps://..." className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-xs font-mono outline-none focus:border-[#006d77]" /><p className="mt-1 text-[11px] text-gray-500">Anda juga dapat mengunggah foto langsung dari halaman belajar materi.</p></label><label className="flex items-center gap-2 text-sm font-semibold md:col-span-2 cursor-pointer"><input type="checkbox" checked={lessonDraft.is_published} onChange={(event) => setLessonDraft({ ...lessonDraft, is_published: event.target.checked })} /> Publish materi</label><div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setLessonDraft(null)} className="min-h-10 rounded-full border border-[#cfe0d5] px-4 text-sm font-semibold cursor-pointer">Batal</button><button disabled={saving} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white hover:bg-[#00565e] cursor-pointer"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan materi'}</button></div></form></ProductionAdminForm>}<section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Struktur materi</p><h2 className="mt-2 text-xl font-semibold">{selectedLessons.length} materi di {courses.find((course) => course.id === selectedCourseId)?.title || 'kelas'}</h2></div><div className="flex items-center gap-2"><select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)} className="min-h-10 max-w-[240px] rounded-xl border border-[#cbded0] bg-white px-3 text-sm">{courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}</select><button onClick={() => startLesson()} className="flex min-h-10 items-center gap-2 rounded-full bg-[#006d77] px-3 text-sm font-bold text-white cursor-pointer"><Plus className="h-4 w-4" />Tambah</button></div></div><div className="mt-5 divide-y divide-[#e4eee7]">{selectedLessons.map((lesson) => <div key={lesson.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{lesson.title}</p><span className="text-xs uppercase text-[#819289]">{lesson.content_type} · {lesson.duration}</span><span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + (lesson.is_published ? 'bg-[#e8f5ed] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{lesson.is_published ? 'Published' : 'Draft'}</span>{lesson.board_photos?.length ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">📸 {lesson.board_photos.length} foto</span> : null}{lesson.teacher_notes ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200">📝 Catatan</span> : null}</div><p className="mt-1 truncate text-xs text-[#819289]">{lesson.content_url || 'URL konten belum diisi'}</p></div><div className="flex items-center gap-2"><button onClick={() => startLesson(lesson)} aria-label="Edit materi" title="Edit materi" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#006d77] hover:bg-emerald-50 cursor-pointer"><Pencil className="h-4 w-4" /></button><button onClick={() => void removeRow('lessons', lesson.id, lesson.title)} aria-label="Hapus materi" title="Hapus materi" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#efd2c8] text-[#b36d4c] hover:bg-red-50 cursor-pointer"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>{!selectedLessons.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada materi untuk kelas ini.</p>}</section></div>}{tab === 'participants' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Data peserta & pengelola</p><h2 className="mt-2 text-xl font-semibold">{profiles.length} akun terdaftar</h2></div><label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#cbded0] px-3"><Search className="h-4 w-4 text-[#819289]" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full min-w-0 text-sm outline-none sm:w-56" placeholder="Cari peserta" /></label></div><div className="mt-5 divide-y divide-[#e4eee7]">{filteredProfiles.map((itemProfile) => <div key={itemProfile.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{itemProfile.full_name || 'Tanpa nama'}</p><span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + (itemProfile.role === 'admin' ? 'bg-[#e5f4f2] text-[#006d77]' : 'bg-[#f3f5f3] text-[#819289]')}>{itemProfile.role === 'admin' ? 'Admin / PJ' : 'Mahasiswa'}</span></div><p className="mt-1 text-xs text-[#819289]">{itemProfile.whatsapp || 'WhatsApp belum diisi'}</p></div><div className="flex items-center gap-3"><span className="text-xs text-[#819289]">{enrollments.filter((item) => item.user_id === itemProfile.id && item.status === 'active').length} kelas aktif</span>{isMaster && itemProfile.id !== user?.id && <button type="button" onClick={() => void toggleRole(itemProfile)} className={'min-h-8 rounded-full border px-3 text-xs font-semibold ' + (itemProfile.role === 'admin' ? 'border-[#efd2c8] text-[#b36d4c] hover:bg-red-50' : 'border-[#cfe0d5] text-[#006d77] hover:bg-[#e5f4f2]')}>{itemProfile.role === 'admin' ? 'Ubah ke Mahasiswa' : 'Jadikan Admin / PJ'}</button>}</div></div>)}</div></section>}{tab === 'access' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Kontrol akses</p><h2 className="mt-2 text-xl font-semibold">Enrollment peserta</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{enrollments.map((enrollment) => <div key={enrollment.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{enrollment.profiles?.full_name || enrollment.user_id}</p><p className="mt-1 text-xs text-[#819289]">{enrollment.courses?.title || enrollment.course_id} · {enrollment.status}</p></div><div className="flex gap-2">{enrollment.status !== 'active' && <button onClick={() => void updateAccess(enrollment, 'active')} className="min-h-9 rounded-full bg-[#006d77] px-3 text-xs font-bold text-white">Aktifkan</button>}{enrollment.status === 'active' && <button onClick={() => void updateAccess(enrollment, 'cancelled')} className="min-h-9 rounded-full border border-[#efd2c8] px-3 text-xs font-semibold text-[#b36d4c]">Cabut akses</button>}{enrollment.status === 'cancelled' && <button onClick={() => void updateAccess(enrollment, 'active')} className="min-h-9 rounded-full border border-[#cfe0d5] px-3 text-xs font-semibold text-[#006d77]">Pulihkan</button>}</div></div>)}</div>{!enrollments.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada enrollment peserta.</p>}</section>}{tab === 'progress' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Monitoring belajar</p><h2 className="mt-2 text-xl font-semibold">Progress per kelas</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{progressByCourse.map((item) => <div key={item.course.id} className="py-4"><div className="flex items-center justify-between gap-4"><div><p className="font-semibold">{item.course.title}</p><p className="mt-1 text-xs text-[#819289]">{item.enrolled} peserta aktif · {item.complete} materi selesai</p></div><span className="font-bold text-[#006d77]">{item.percent}%</span></div><div className="mt-3 h-2 rounded-full bg-[#e3eee6]"><div className="h-2 rounded-full bg-[#006d77]" style={{ width: item.percent + '%' }} /></div></div>)}</div></section>}{tab === 'transactions' && <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Pembayaran</p><h2 className="mt-2 text-xl font-semibold">Riwayat transaksi</h2></div><div className="mt-5 divide-y divide-[#e4eee7]">{orders.map((order) => <div key={order.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{order.profiles?.full_name || 'Peserta'}</p><p className="mt-1 text-xs text-[#819289]">{order.courses?.title || '-'} · {order.provider}</p></div><div className="text-left sm:text-right"><p className="font-semibold text-[#006d77]">Rp{order.amount.toLocaleString('id-ID')}</p><p className="mt-1 text-xs uppercase text-[#819289]">{order.status}</p></div></div>)}</div>{!orders.length && <p className="mt-5 rounded-xl bg-[#f7faf8] p-5 text-sm text-[#819289]">Belum ada transaksi.</p>}</section>}</>}</div>;
 };
 
 const ProductionAdminForm = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <section className="rounded-[18px] border border-[#bcd8c4] bg-[#f3faf5] p-5"><div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">{title}</h2>{title.toLowerCase().includes('materi') && <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-[#607568]">Upload file materi<input type="file" accept="video/*,application/pdf,.txt,.md" onChange={(event) => window.dispatchEvent(new CustomEvent<File | null>('al-madraj-content-file', { detail: event.target.files?.[0] || null }))} className="max-w-[220px] text-xs" /></label>}</div><button onClick={onClose} aria-label="Tutup form" title="Tutup form" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568]"><X className="h-4 w-4" /></button></div>{children}</section>;
@@ -4680,7 +5122,7 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
           ) : <section className="rounded-[20px] border border-[#cfe0d5] bg-[#f5fbf7] p-7 text-center sm:p-10"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e5f4f2] text-[#006d77]"><Search className="h-5 w-5" /></div><h2 className="mt-5 text-2xl font-semibold text-[#17382c]">Kelas tidak ditemukan.</h2><p className="mt-2 text-sm leading-6 text-[#607568]">Coba ubah kata kunci atau filter yang kamu pilih.</p><button onClick={() => { setSearch(''); setProgramFilter('Semua'); setFacultyFilter('Semua'); }} className="mt-5 text-sm font-bold text-[#006d77]">Reset filter</button></section>}</> : <section className="rounded-[22px] border border-[#cfe0d5] bg-[#f5fbf7] p-7 sm:p-9"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e5f4f2] text-[#006d77]"><BookOpen className="h-6 w-6" /></div><h2 className="mt-6 text-2xl font-semibold text-[#17382c]">Belum ada kelas aktif.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-[#607568]">Kamu belum memiliki kelas yang bisa dipelajari. Pilih program dari katalog terlebih dahulu untuk mulai belajar dan menyimpan progress.</p><button onClick={() => onNavigate('/kelas')} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Lihat katalog <ArrowRight className="h-4 w-4" /></button></section>}</div></BackendShell>;
 };
 
-const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, onLogout }: { path: string; user: { id: string }; profile: Profile | null; onNavigate: (path: string) => void; onError: (message: string) => void; onLogout: () => void }) => {
+const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, onLogout }: { path: string; user: { id: string; email?: string }; profile: Profile | null; onNavigate: (path: string) => void; onError: (message: string) => void; onLogout: () => void }) => {
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progressByLesson, setProgressByLesson] = useState<Record<string, LessonProgress>>({});
@@ -4688,6 +5130,11 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [focusedLesson, setFocusedLesson] = useState<Lesson | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'saburah' | 'notes' | 'modul' | 'certificate'>('saburah');
+  const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
+  const [whiteboardManagerOpen, setWhiteboardManagerOpen] = useState(false);
+  const [teacherNotesEditorOpen, setTeacherNotesEditorOpen] = useState(false);
+  const [certificateModalOpen, setCertificateModalOpen] = useState(false);
   const lastPersistedAt = useRef<Record<string, number>>({});
   const progressRef = useRef(progressByLesson);
 
@@ -4818,8 +5265,14 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
       }
       setAccessDenied(false);
 
-      const lessonsResult = await sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order').eq('course_id', courseResult.data.id).eq('is_published', true).order('sort_order');
-      let loadedLessons = lessonsResult.data || [];
+      let loadedLessons: Lesson[] = [];
+      const primaryRes = await sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order,teacher_notes,board_photos').eq('course_id', courseResult.data.id).eq('is_published', true).order('sort_order');
+      if (primaryRes.data && !primaryRes.error) {
+        loadedLessons = primaryRes.data as Lesson[];
+      } else {
+        const fallbackRes = await sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order').eq('course_id', courseResult.data.id).eq('is_published', true).order('sort_order');
+        loadedLessons = (fallbackRes.data || []) as Lesson[];
+      }
       if (!loadedLessons.length) {
         const detail = getCourseDetail(slug);
         if (detail?.lessons?.length) {
@@ -4831,6 +5284,8 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
             duration: item.duration || 'Video Kajian',
             content_url: item.youtubeUrl || `https://www.youtube.com/watch?v=${item.youtubeId}`,
             sort_order: item.sortOrder || idx + 1,
+            teacher_notes: undefined,
+            board_photos: []
           }));
         }
       }
@@ -4968,6 +5423,41 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
   const courseDetail = course ? getCourseDetail(course.slug) : undefined;
   const activeLessonDetail = courseDetail?.lessons?.find((item, idx) => item.sortOrder === activeLesson?.sort_order || idx === currentIndex);
 
+  const userEmail = (user.email || profile?.full_name || '').toLowerCase().trim();
+  const isMaster = isMasterAdmin(user.email);
+  const isCoursePj = Boolean(
+    course?.pj_email && course.pj_email.toLowerCase().trim() === userEmail
+  ) || Boolean(
+    course?.pj_name && profile?.full_name && course.pj_name.toLowerCase().trim() === profile.full_name.toLowerCase().trim()
+  );
+  const canManageCourse = isMaster || profile?.role === 'admin' || isCoursePj;
+
+  const handleSaveBoardPhotos = async (updatedPhotos: string[]) => {
+    if (!activeLesson) return;
+    const sb = requireSupabase();
+    const { error: saveErr } = await sb.from('lessons').update({
+      board_photos: updatedPhotos,
+    }).eq('id', activeLesson.id);
+    if (saveErr) throw new Error(saveErr.message);
+
+    const updatedLesson: Lesson = { ...activeLesson, board_photos: updatedPhotos };
+    setActiveLesson(updatedLesson);
+    setLessons((prev) => prev.map((l) => (l.id === activeLesson.id ? updatedLesson : l)));
+  };
+
+  const handleSaveTeacherNotes = async (notes: string) => {
+    if (!activeLesson) return;
+    const sb = requireSupabase();
+    const { error: saveErr } = await sb.from('lessons').update({
+      teacher_notes: notes,
+    }).eq('id', activeLesson.id);
+    if (saveErr) throw new Error(saveErr.message);
+
+    const updatedLesson: Lesson = { ...activeLesson, teacher_notes: notes };
+    setActiveLesson(updatedLesson);
+    setLessons((prev) => prev.map((l) => (l.id === activeLesson.id ? updatedLesson : l)));
+  };
+
   return (
     <BackendShell profile={profile} onNavigate={onNavigate} onLogout={onLogout}>
       <div className="space-y-5">
@@ -5019,8 +5509,66 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
             {/* Video Stage & Lesson Details Card */}
             <section className="overflow-hidden rounded-[24px] border border-[#d8e6dc] bg-white shadow-sm">
               {/* Cinema Player Container - Zero Ugly Margin */}
-              <div className="relative aspect-video w-full bg-black overflow-hidden">
-                {activeYoutubeId && activeLesson ? (
+              <div className="relative aspect-video w-full bg-black overflow-hidden flex items-center justify-center">
+                {activeLesson?.content_type === 'audio' ? (
+                  activeLesson.content_url && getGoogleDriveEmbedUrl(activeLesson.content_url) ? (
+                    <div className="relative h-full w-full bg-[#081f18] flex flex-col items-center justify-center p-4 sm:p-6">
+                      <div className="w-full max-w-2xl rounded-2xl overflow-hidden border border-[#2b6d58] shadow-2xl bg-black">
+                        <div className="bg-gradient-to-r from-[#006d77] to-[#102c22] px-4 py-3 flex items-center justify-between text-white">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Headphones className="h-4 w-4 text-[#83c5be] shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold truncate">{activeLessonTitle}</span>
+                          </div>
+                          <span className="text-[10px] uppercase font-mono tracking-wider bg-white/10 px-2 py-0.5 rounded-full shrink-0 ml-2">
+                            Google Drive Audio
+                          </span>
+                        </div>
+                        <iframe
+                          src={getGoogleDriveEmbedUrl(activeLesson.content_url)!}
+                          className="w-full h-32 sm:h-40 border-0"
+                          allow="autoplay"
+                          title={activeLessonTitle}
+                        />
+                      </div>
+                      <div className="mt-4 flex items-center gap-2 text-xs text-[#a4ebd0]/90 text-center">
+                        <Headphones className="h-3.5 w-3.5 text-[#83c5be]" />
+                        <span>Dengarkan audio sambil membuka tab <strong>Foto Papan Tulis</strong> di bawah</span>
+                      </div>
+                    </div>
+                  ) : activeLesson?.content_url ? (
+                    <div className="h-full w-full flex items-center justify-center p-4 sm:p-6 bg-[#07241c]">
+                      <div className="w-full max-w-2xl">
+                        <AudioLessonPlayer
+                          audioUrl={activeLesson.content_url}
+                          title={activeLessonTitle}
+                          tutor={getCourseTutorName(course.slug, course.tutor)}
+                          startSeconds={progressByLesson[activeLesson.id]?.watched_seconds || 0}
+                          onProgress={(watched, duration, force) => {
+                            void persistProgress(activeLesson, watched, duration, false, force);
+                          }}
+                          onComplete={(watched, duration) => {
+                            void persistProgress(activeLesson, watched, duration, true, true);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center px-6 text-center text-[#607568] bg-[#0c1f18]">
+                      <Headphones className="h-14 w-14 text-[#83c5be] mb-2" />
+                      <p className="text-base font-bold text-white">Audio Talaqqi Belum Tersedia</p>
+                      <p className="mt-1 max-w-md text-xs leading-5 text-[#a4ebd0]/70">
+                        {course.pj_name ? `PJ Maddah (${course.pj_name})` : 'Pengelola'} sedang menyiapkan rekaman audio untuk materi ini.
+                      </p>
+                    </div>
+                  )
+                ) : activeLesson?.content_type === 'video' && activeLesson.content_url && getGoogleDriveEmbedUrl(activeLesson.content_url) ? (
+                  <iframe
+                    src={getGoogleDriveEmbedUrl(activeLesson.content_url)!}
+                    className="h-full w-full border-0"
+                    allow="autoplay; fullscreen"
+                    title={activeLessonTitle}
+                  />
+                ) : activeYoutubeId && activeLesson ? (
                   <YouTubeRestrictedPlayer
                     videoId={activeYoutubeId}
                     title={activeLessonTitle}
@@ -5047,11 +5595,11 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                   <div className="flex h-full flex-col items-center justify-center px-6 text-center text-[#607568] bg-[#0c1f18]">
                     <CirclePlay className="h-14 w-14 text-[#83c5be]" />
                     <p className="mt-3 text-base font-bold text-white">
-                      {activeLesson ? 'Materi video belum tersedia' : 'Pilih materi untuk mulai belajar'}
+                      {activeLesson ? 'Materi video/audio belum tersedia' : 'Pilih materi untuk mulai belajar'}
                     </p>
                     <p className="mt-1 max-w-md text-xs leading-5 text-[#a4ebd0]/70">
                       {activeLesson
-                        ? 'URL video belum ditambahkan ke materi ini oleh pengajar.'
+                        ? 'Link konten Google Drive atau video belum diisi untuk materi ini.'
                         : 'Pilih salah satu bab dari daftar isi kelas di samping kanan.'}
                     </p>
                   </div>
@@ -5143,6 +5691,319 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                     )}
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* Interactive Tabbed Section: Foto Papan Tulis (Saburah), Catatan Guru, Modul PDF, Syahadah */}
+            <section className="overflow-hidden rounded-[24px] border border-[#d8e6dc] bg-white shadow-sm">
+              {/* Tab Headers */}
+              <div className="flex border-b border-gray-100 bg-[#fbfdfc] overflow-x-auto px-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('saburah')}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                    activeTab === 'saburah'
+                      ? 'border-[#006d77] text-[#006d77]'
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>Foto Papan Tulis</span>
+                  {activeLesson?.board_photos?.length ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      {activeLesson.board_photos.length}
+                    </span>
+                  ) : null}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('notes')}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                    activeTab === 'notes'
+                      ? 'border-[#006d77] text-[#006d77]'
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Catatan Guru</span>
+                  {activeLesson?.teacher_notes ? (
+                    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                  ) : null}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('modul')}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                    activeTab === 'modul'
+                      ? 'border-[#006d77] text-[#006d77]'
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span>Modul &amp; Diktat PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('certificate')}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                    activeTab === 'certificate'
+                      ? 'border-[#006d77] text-[#006d77]'
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <Award className="h-4 w-4 text-amber-600" />
+                  <span>Syahadah Khatam</span>
+                  {overallProgress === 100 && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 animate-bounce">
+                      Siap
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-5 sm:p-7">
+                {/* TAB 1: Foto Papan Tulis (Saburah) */}
+                {activeTab === 'saburah' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900">
+                          Dokumentasi Papan Tulis (Saburah)
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Simak audio bimbel sambil memperbesar tulisan, bagan, dan catatan yang ditulis pengampu di papan tulis.
+                        </p>
+                      </div>
+                      {canManageCourse && activeLesson && (
+                        <button
+                          type="button"
+                          onClick={() => setWhiteboardManagerOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00565e] cursor-pointer self-start"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          <span>Kelola / Upload Foto Saburah</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {activeLesson?.board_photos && activeLesson.board_photos.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-2">
+                        {activeLesson.board_photos.map((url, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setLightboxPhotoIndex(idx)}
+                            className="group relative aspect-4/3 rounded-2xl overflow-hidden border border-gray-200 bg-gray-100 cursor-pointer shadow-2xs hover:shadow-md transition hover:border-[#006d77]"
+                          >
+                            <img
+                              src={url}
+                              alt={`Papan Tulis ${idx + 1}`}
+                              className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-end p-2.5">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white">
+                                <Maximize className="h-3 w-3" /> Perbesar Foto #{idx + 1}
+                              </span>
+                            </div>
+                            <span className="absolute top-2 left-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center bg-gray-50/50">
+                        <Camera className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                        <p className="text-sm font-semibold text-gray-700">Belum Ada Foto Papan Tulis untuk Pertemuan Ini</p>
+                        <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+                          Foto catatan dan bagan papan tulis akan muncul di sini saat diunggah oleh PJ Maddah ({course.pj_name || 'Penanggung Jawab'}).
+                        </p>
+                        {canManageCourse && activeLesson && (
+                          <button
+                            type="button"
+                            onClick={() => setWhiteboardManagerOpen(true)}
+                            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white hover:bg-[#00565e] cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Upload Foto Papan Tulis Sekarang</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: Catatan Guru */}
+                {activeTab === 'notes' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900">
+                          Catatan Pengampu &amp; Faedah Dars
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Poin penting, rujukan kitab, ikhtisar kaidah, atau catatan resmi dari pengampu.
+                        </p>
+                      </div>
+                      {canManageCourse && activeLesson && (
+                        <button
+                          type="button"
+                          onClick={() => setTeacherNotesEditorOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00565e] cursor-pointer self-start"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>{activeLesson.teacher_notes ? 'Edit Catatan Guru' : '+ Tulis Catatan Guru'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {activeLesson?.teacher_notes ? (
+                      <div className="rounded-2xl border border-[#d8e6dc] bg-[#f9fcfb] p-5 sm:p-6 text-gray-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line font-sans">
+                        {activeLesson.teacher_notes}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center bg-gray-50/50">
+                        <FileText className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                        <p className="text-sm font-semibold text-gray-700">Belum Ada Catatan Guru untuk Materi Ini</p>
+                        <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+                          Catatan faedah penting dars akan dicantumkan di sini oleh PJ Maddah.
+                        </p>
+                        {canManageCourse && activeLesson && (
+                          <button
+                            type="button"
+                            onClick={() => setTeacherNotesEditorOpen(true)}
+                            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white hover:bg-[#00565e] cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Tulis Catatan Guru Sekarang</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: Modul & Diktat PDF */}
+                {activeTab === 'modul' && (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">
+                        Diktat &amp; Modul Pembelajaran PDF
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Unduh materi resmi, muqarrar dars, atau kitab pegangan untuk mata kuliah ini.
+                      </p>
+                    </div>
+
+                    {course.modul_url ? (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#006d77] text-white shadow-sm">
+                            <FileText className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm sm:text-base font-bold text-gray-900">
+                              Diktat Lengkap: {course.title}
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Format PDF resmi • Markaz Al Madraj Al-Azhar
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={course.modul_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded-full bg-[#006d77] px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-sm hover:bg-[#00565e] transition cursor-pointer"
+                          >
+                            <Download className="h-4 w-4" />
+                            <span>Download / Buka PDF</span>
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center bg-gray-50/50">
+                        <BookOpen className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                        <p className="text-sm font-semibold text-gray-700">Modul / Diktat PDF Belum Diunggah</p>
+                        <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+                          File diktat PDF sedang disiapkan oleh PJ Maddah ({course.pj_name || 'Admin Markaz'}). Silakan cek kembali secara berkala.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 4: Syahadah Khatam */}
+                {activeTab === 'certificate' && (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">
+                        Syahadah Khatam Dirasah (Sertifikat)
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Bukti resmi penyelesaian seluruh muqarrar dars dan talaqqi di Markaz Dirasat Al Madraj.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-[#d8e6dc] bg-gradient-to-br from-[#f8fcf9] via-white to-[#edf7f2] p-6 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#006d77]/10 text-[#006d77] mb-3">
+                        <Award className="h-8 w-8 text-[#006d77]" />
+                      </div>
+
+                      <h4 className="text-lg sm:text-xl font-bold text-[#17382c]">
+                        {course.title}
+                      </h4>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Progres Pembelajaran Anda: <strong className="text-[#006d77]">{overallProgress}%</strong> ({completedCount} dari {lessons.length} materi selesai)
+                      </p>
+
+                      <div className="my-5 mx-auto max-w-md">
+                        <div className="h-2.5 w-full rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[#006d77] transition-all duration-500"
+                            style={{ width: `${overallProgress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {overallProgress >= 100 || completedCount >= lessons.length ? (
+                        <div className="space-y-3">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-300">
+                            <Check className="h-3.5 w-3.5" /> Syahadah Siap Dicetak
+                          </span>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setCertificateModalOpen(true)}
+                              className="inline-flex items-center gap-2 rounded-full bg-[#006d77] px-6 py-3 text-sm font-bold text-white shadow-lg hover:bg-[#00565e] hover:scale-105 transition cursor-pointer"
+                            >
+                              <Award className="h-4 w-4" />
+                              <span>Klaim &amp; Cetak Syahadah Sekarang</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-xs text-gray-600 mb-3">
+                            Selesaikan semua materi di daftar isi kelas untuk membuka Syahadah Khatam resmi Anda.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setCertificateModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Pratinjau Format Syahadah</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -5285,9 +6146,64 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
             </div>
           </aside>
         </div>
-{focusedLesson && <TrackedContentModal lesson={focusedLesson} metadata={youtubeMetadataByLesson[focusedLesson.id]} progress={progressByLesson[focusedLesson.id]} viewerLabel={profile?.full_name || 'Mahasiswa Al Madraj'} onProgress={(watched, duration, force) => { void persistProgress(focusedLesson, watched, duration, false, force); }} onComplete={(watched, duration) => { void persistProgress(focusedLesson, watched, duration, true, true); }} onClose={() => setFocusedLesson(null)} />}</div></BackendShell>
-    );
-  };
+
+        {focusedLesson && (
+          <TrackedContentModal
+            lesson={focusedLesson}
+            metadata={youtubeMetadataByLesson[focusedLesson.id]}
+            progress={progressByLesson[focusedLesson.id]}
+            viewerLabel={profile?.full_name || 'Mahasiswa Al Madraj'}
+            onProgress={(watched, duration, force) => {
+              void persistProgress(focusedLesson, watched, duration, false, force);
+            }}
+            onComplete={(watched, duration) => {
+              void persistProgress(focusedLesson, watched, duration, true, true);
+            }}
+            onClose={() => setFocusedLesson(null)}
+          />
+        )}
+
+        {/* Whiteboard Lightbox Modal */}
+        {lightboxPhotoIndex !== null && activeLesson?.board_photos && (
+          <WhiteboardLightboxModal
+            photos={activeLesson.board_photos}
+            initialIndex={lightboxPhotoIndex}
+            onClose={() => setLightboxPhotoIndex(null)}
+          />
+        )}
+
+        {/* Whiteboard Manager Modal for PJ/Admin */}
+        {whiteboardManagerOpen && activeLesson && (
+          <WhiteboardManagerModal
+            lesson={activeLesson}
+            onSave={handleSaveBoardPhotos}
+            onClose={() => setWhiteboardManagerOpen(false)}
+          />
+        )}
+
+        {/* Teacher Notes Editor Modal for PJ/Admin */}
+        {teacherNotesEditorOpen && activeLesson && (
+          <TeacherNotesEditorModal
+            lesson={activeLesson}
+            onSave={handleSaveTeacherNotes}
+            onClose={() => setTeacherNotesEditorOpen(false)}
+          />
+        )}
+
+        {/* Official Certificate Modal */}
+        {certificateModalOpen && (
+          <CertificateModal
+            studentName={profile?.full_name || 'Mahasiswa Al Madraj'}
+            courseTitle={course.title}
+            faculty={course.faculty}
+            tutor={getCourseTutorName(course.slug, course.tutor)}
+            onClose={() => setCertificateModalOpen(false)}
+          />
+        )}
+      </div>
+    </BackendShell>
+  );
+};
 
 const youtubeVideoId = (url: string) => {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&/]+)/i);
@@ -5379,6 +6295,731 @@ const formatPlaybackTime = (value: number) => {
   return hours
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     : `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const AudioLessonPlayer = ({
+  audioUrl,
+  title,
+  tutor,
+  coverUrl,
+  startSeconds = 0,
+  onProgress,
+  onComplete,
+}: {
+  audioUrl: string;
+  title: string;
+  tutor?: string;
+  coverUrl?: string;
+  startSeconds?: number;
+  onProgress: (watched: number, duration: number, force?: boolean) => void;
+  onComplete: (watched: number, duration: number) => void;
+}) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(startSeconds);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const lastReported = useRef(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = startSeconds;
+    audio.playbackRate = playbackRate;
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    const cur = audioRef.current.currentTime;
+    const dur = audioRef.current.duration || 0;
+    setCurrentTime(cur);
+    setDuration(dur);
+
+    if (Math.abs(cur - lastReported.current) >= 4) {
+      lastReported.current = cur;
+      onProgress(Math.floor(cur), Math.floor(dur), false);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    if (!audioRef.current) return;
+    const dur = audioRef.current.duration || 0;
+    onProgress(Math.floor(dur), Math.floor(dur), true);
+    onComplete(Math.floor(dur), Math.floor(dur));
+  };
+
+  const seek = (seconds: number) => {
+    if (!audioRef.current) return;
+    const next = Math.max(0, Math.min(duration || 1000, seconds));
+    audioRef.current.currentTime = next;
+    setCurrentTime(next);
+  };
+
+  const skip = (delta: number) => {
+    seek(currentTime + delta);
+  };
+
+  const changeRate = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) audioRef.current.playbackRate = rate;
+  };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    audioRef.current.muted = !isMuted;
+    setIsMuted(!isMuted);
+  };
+
+  const percent = duration ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  return (
+    <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#07241c] via-[#0d3429] to-[#041c15] p-6 text-white sm:p-8 shadow-xl border border-[#1b4e3f]">
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        preload="metadata"
+      />
+      <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
+        <div className="relative shrink-0">
+          <div className={`h-28 w-28 sm:h-36 sm:w-36 rounded-2xl overflow-hidden border-2 border-[#2b6d58] shadow-lg ${isPlaying ? 'ring-4 ring-[#83c5be]/30' : ''}`}>
+            {coverUrl ? (
+              <img src={coverUrl} alt="Cover Talaqqi" className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full bg-gradient-to-br from-[#006d77] to-[#043328] flex flex-col items-center justify-center p-3 text-center">
+                <Headphones className="h-10 w-10 text-[#83c5be] mb-1" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">Dars Audio</span>
+              </div>
+            )}
+          </div>
+          {isPlaying && (
+            <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#006d77] text-white shadow">
+              <Music className="h-3 w-3 animate-spin" style={{ animationDuration: '3s' }} />
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 w-full min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 border border-emerald-500/30">
+              <Headphones className="h-3 w-3" /> Audio Talaqqi Bimbel
+            </span>
+            {tutor && <span className="text-xs text-[#8ba99b]">Pengampu: {tutor}</span>}
+          </div>
+          <h3 className="mt-2 text-lg sm:text-xl font-bold leading-snug tracking-tight text-white line-clamp-2">
+            {title}
+          </h3>
+
+          <div className="mt-5">
+            <div
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+                seek(ratio * duration);
+              }}
+              className="relative h-2 w-full cursor-pointer rounded-full bg-white/20 hover:h-2.5 transition-all"
+            >
+              <div
+                className="absolute top-0 bottom-0 left-0 rounded-full bg-[#83c5be] transition-all"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-[#a3c2b5]">
+              <span>{formatPlaybackTime(currentTime)}</span>
+              <span>{formatPlaybackTime(duration)}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => skip(-10)}
+                title="Mundur 10 detik"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition cursor-pointer"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[#006d77] text-white shadow-lg hover:bg-[#00565e] hover:scale-105 transition cursor-pointer"
+              >
+                {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => skip(10)}
+                title="Maju 10 detik"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition cursor-pointer"
+              >
+                <RotateCw className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center rounded-xl bg-white/10 p-0.5 text-[11px] font-bold">
+                {[1, 1.25, 1.5, 2].map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => changeRate(rate)}
+                    className={`rounded-lg px-2 py-1 transition cursor-pointer ${playbackRate === rate ? 'bg-[#006d77] text-white' : 'text-gray-300 hover:text-white'}`}
+                  >
+                    {rate}x
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-gray-300 hover:text-white transition cursor-pointer"
+              >
+                {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CertificateModal = ({
+  studentName,
+  courseTitle,
+  faculty,
+  tutor,
+  completedDate,
+  onClose,
+}: {
+  studentName: string;
+  courseTitle: string;
+  faculty?: string;
+  tutor?: string;
+  completedDate?: string;
+  onClose: () => void;
+}) => {
+  const serialNo = useMemo(() => {
+    const hash = Math.abs(courseTitle.split('').reduce((acc, c) => acc + c.charCodeAt(0), 1234));
+    return `ALM-${new Date().getFullYear()}-${String(hash).slice(0, 5).padStart(5, '7')}`;
+  }, [courseTitle]);
+
+  const dateFormatted = completedDate
+    ? new Date(completedDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+    : new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const printCert = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-3xl rounded-3xl bg-white p-6 sm:p-10 shadow-2xl border-4 border-[#006d77]/20 my-auto text-center">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer print:hidden"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="relative rounded-2xl border-2 border-dashed border-[#006d77]/40 bg-gradient-to-b from-[#f9fcfb] via-white to-[#f4f9f6] p-6 sm:p-10">
+          <div className="flex flex-col items-center">
+            <img src="/al-madroj-brand.png" alt="Logo Al Madraj" className="h-14 w-auto object-contain" />
+            <p className="mt-3 text-xs font-bold uppercase tracking-[0.25em] text-[#006d77]">
+              Markaz Dirasat &amp; Riset Turats Al-Azhar
+            </p>
+            <h2 className="mt-1 font-serif text-3xl sm:text-4xl font-normal tracking-tight text-[#17382c]">
+              SYAHADAH KHATAM DIRASAH
+            </h2>
+            <p className="text-xs italic text-gray-500 font-serif">Certificate of Course Completion</p>
+          </div>
+
+          <div className="my-6 border-t border-[#006d77]/20" />
+
+          <p className="text-xs sm:text-sm text-gray-600">Diberikan secara resmi kepada:</p>
+          <h3 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#006d77] underline decoration-[#006d77]/30 decoration-2 underline-offset-8">
+            {studentName || 'Mahasiswa Al Madraj'}
+          </h3>
+
+          <p className="mt-6 max-w-xl mx-auto text-xs sm:text-sm leading-relaxed text-gray-700">
+            Telah menyelesaikan seluruh rangkaian pembahasan, kajian talaqqi, dan muqarrar dars pada mata kuliah:
+          </p>
+          <h4 className="mt-3 text-xl sm:text-2xl font-bold text-[#17382c]">
+            {courseTitle}
+          </h4>
+          {faculty && (
+            <p className="mt-1 text-xs font-semibold text-[#557064]">
+              Fakultas {faculty} • Jamiah Al-Azhar Kairo
+            </p>
+          )}
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-6 pt-6 border-t border-gray-100 text-xs text-gray-600">
+            <div className="text-left">
+              <p className="font-semibold text-gray-800">Nomor Registrasi:</p>
+              <p className="font-mono text-[#006d77]">{serialNo}</p>
+              <p className="mt-1 text-[11px] text-gray-400">Tanggal: {dateFormatted}</p>
+            </div>
+
+            <div className="text-center sm:text-right">
+              <div className="inline-block border-b border-gray-400 pb-1 px-6">
+                <p className="font-bold text-gray-900">{tutor || 'Syaikh / Pengampu Dars'}</p>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500">Khadim Al-Ilm Markaz Al Madraj</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-center gap-3 print:hidden">
+          <button
+            onClick={printCert}
+            className="inline-flex items-center gap-2 rounded-full bg-[#006d77] px-6 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#00565e] cursor-pointer"
+          >
+            <Printer className="h-4 w-4" />
+            <span>Cetak / Simpan PDF</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 py-2.5 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const getGoogleDriveEmbedUrl = (url?: string | null): string | null => {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed.includes('drive.google.com')) return null;
+  const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch && fileMatch[1]) {
+    return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  }
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    return `https://drive.google.com/file/d/${idMatch[1]}/preview`;
+  }
+  return null;
+};
+
+const WhiteboardLightboxModal = ({
+  photos,
+  initialIndex = 0,
+  onClose,
+}: {
+  photos: string[];
+  initialIndex?: number;
+  onClose: () => void;
+}) => {
+  const [index, setIndex] = useState(initialIndex);
+  const [zoom, setZoom] = useState(1);
+
+  const prev = () => {
+    setZoom(1);
+    setIndex((curr) => (curr > 0 ? curr - 1 : photos.length - 1));
+  };
+  const next = () => {
+    setZoom(1);
+    setIndex((curr) => (curr < photos.length - 1 ? curr + 1 : 0));
+  };
+  const zoomIn = () => setZoom((z) => Math.min(3, z + 0.5));
+  const zoomOut = () => setZoom((z) => Math.max(1, z - 0.5));
+
+  const currentPhoto = photos[index];
+
+  return (
+    <div className="fixed inset-0 z-[95] flex flex-col items-center justify-between bg-black/90 p-4 backdrop-blur-md">
+      <div className="flex w-full max-w-5xl items-center justify-between py-2 text-white">
+        <div className="flex items-center gap-3">
+          <Camera className="h-5 w-5 text-[#83c5be]" />
+          <div>
+            <h3 className="text-sm font-bold sm:text-base">Foto Papan Tulis (Saburah)</h3>
+            <p className="text-xs text-gray-400">
+              Foto {index + 1} dari {photos.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={zoomOut}
+            disabled={zoom <= 1}
+            title="Perkecil"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 transition cursor-pointer text-sm font-bold"
+          >
+            -
+          </button>
+          <span className="text-xs font-mono px-1">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            onClick={zoomIn}
+            disabled={zoom >= 3}
+            title="Perbesar"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 transition cursor-pointer text-sm font-bold"
+          >
+            +
+          </button>
+          <a
+            href={currentPhoto}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/20 transition ml-2"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Download</span>
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition cursor-pointer ml-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative flex flex-1 w-full max-w-5xl items-center justify-center overflow-hidden my-2">
+        {photos.length > 1 && (
+          <button
+            type="button"
+            onClick={prev}
+            className="absolute left-2 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs transition cursor-pointer"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        )}
+
+        <div className="max-h-[75vh] max-w-full overflow-auto flex items-center justify-center p-2">
+          <img
+            src={currentPhoto}
+            alt={`Foto Papan Tulis ${index + 1}`}
+            style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+            className="max-h-[72vh] max-w-full rounded-lg object-contain transition-transform duration-200"
+          />
+        </div>
+
+        {photos.length > 1 && (
+          <button
+            type="button"
+            onClick={next}
+            className="absolute right-2 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs transition cursor-pointer"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        )}
+      </div>
+
+      {photos.length > 1 && (
+        <div className="flex max-w-xl gap-2 overflow-x-auto py-2">
+          {photos.map((p, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setZoom(1);
+                setIndex(i);
+              }}
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition ${i === index ? 'border-[#83c5be] ring-2 ring-[#83c5be]/50' : 'border-transparent opacity-60 hover:opacity-100'}`}
+            >
+              <img src={p} alt={`Thumb ${i + 1}`} className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const WhiteboardManagerModal = ({
+  lesson,
+  onSave,
+  onClose,
+}: {
+  lesson: Lesson;
+  onSave: (updatedPhotos: string[]) => Promise<void>;
+  onClose: () => void;
+}) => {
+  const [photos, setPhotos] = useState<string[]>(lesson.board_photos || []);
+  const [newUrl, setNewUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const addUrl = () => {
+    if (!newUrl.trim()) return;
+    setPhotos([...photos, newUrl.trim()]);
+    setNewUrl('');
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos(photos.filter((_, i) => i !== idx));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setErr('');
+    try {
+      const sb = requireSupabase();
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `board-photos/${lesson.id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const res = await sb.storage.from('lms-materials').upload(path, file, { upsert: true });
+      if (res.error) throw new Error(res.error.message);
+      const { data: pubData } = sb.storage.from('lms-materials').getPublicUrl(path);
+      const uploadedUrl = pubData.publicUrl;
+      setPhotos([...photos, uploadedUrl]);
+    } catch (_uploadError: any) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setPhotos((cur) => [...cur, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const saveAll = async () => {
+    setSaving(true);
+    setErr('');
+    try {
+      await onSave(photos);
+      onClose();
+    } catch (saveErr: any) {
+      setErr(saveErr.message || 'Gagal menyimpan foto papan tulis.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[88] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl border border-gray-200 my-auto">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-[#006d77]">
+              <Camera className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Kelola Foto Papan Tulis (Saburah)</h3>
+              <p className="text-xs text-gray-500">{lesson.title}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">
+            {err}
+          </div>
+        )}
+
+        <div className="mt-4 max-h-[40vh] overflow-y-auto">
+          {photos.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center">
+              <Camera className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+              <p className="text-xs font-semibold text-gray-600">Belum ada foto papan tulis</p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Upload foto catatan papan tulis dari pertemuan talaqqi ini agar mahasiswa bisa menyimak audio sambil melihat tulisan ustadz/syaikh.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {photos.map((url, idx) => (
+                <div key={idx} className="group relative aspect-video rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                  <img src={url} alt={`Foto ${idx + 1}`} className="h-full w-full object-cover" />
+                  <span className="absolute top-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    #{idx + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    className="absolute top-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition cursor-pointer hover:bg-red-700"
+                    title="Hapus foto ini"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <label className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#006d77] bg-emerald-50/50 px-4 py-2.5 text-xs font-semibold text-[#006d77] hover:bg-emerald-50 cursor-pointer">
+              <Camera className="h-4 w-4" />
+              <span>{uploading ? 'Mengunggah foto...' : 'Upload Foto dari Perangkat'}</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="Atau tempel URL gambar / Google Drive direct link..."
+              className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-[#006d77] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={addUrl}
+              className="rounded-xl bg-gray-800 px-4 py-2 text-xs font-semibold text-white hover:bg-black cursor-pointer"
+            >
+              Tambah
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={saveAll}
+            disabled={saving || uploading}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2 text-xs font-bold text-white hover:bg-[#00565e] disabled:opacity-50 cursor-pointer"
+          >
+            <Save className="h-3.5 w-3.5" />
+            <span>{saving ? 'Menyimpan...' : 'Simpan Foto Papan Tulis'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TeacherNotesEditorModal = ({
+  lesson,
+  onSave,
+  onClose,
+}: {
+  lesson: Lesson;
+  onSave: (notes: string) => Promise<void>;
+  onClose: () => void;
+}) => {
+  const [notes, setNotes] = useState(lesson.teacher_notes || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSave = async () => {
+    setSaving(true);
+    setErr('');
+    try {
+      await onSave(notes);
+      onClose();
+    } catch (saveErr: any) {
+      setErr(saveErr.message || 'Gagal menyimpan catatan guru.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[88] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl border border-gray-200 my-auto">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-[#006d77]">
+              <FileCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Catatan Pengampu / Faedah Dars</h3>
+              <p className="text-xs text-gray-500">{lesson.title}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-700">
+            {err}
+          </div>
+        )}
+
+        <div className="mt-4">
+          <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+            Tulis faedah, poin penting, rujukan kitab, atau ikhtisar dars:
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={7}
+            placeholder="Contoh: Pada pertemuan ini Syaikh menjelaskan perbedaan makna antara muthlaq dan muqayyad menurut madzhab Syafi'i..."
+            className="w-full rounded-2xl border border-gray-200 p-3.5 text-xs sm:text-sm leading-relaxed focus:border-[#006d77] focus:outline-none"
+          />
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2 text-xs font-bold text-white hover:bg-[#00565e] disabled:opacity-50 cursor-pointer"
+          >
+            <Save className="h-3.5 w-3.5" />
+            <span>{saving ? 'Menyimpan...' : 'Simpan Catatan'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const YouTubeRestrictedPlayer = ({
