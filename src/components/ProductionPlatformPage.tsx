@@ -5269,7 +5269,7 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
                     key={course.id}
                     className="group flex h-full flex-col overflow-hidden rounded-[16px] sm:rounded-[20px] border border-[#dce9df] bg-white transition hover:-translate-y-0.5 hover:border-[#91c9a4] hover:shadow-[0_16px_35px_rgba(7,84,71,0.08)]"
                   >
-                    {/* Course Thumbnail Image with Exact Aspect Ratio and Overlays */}
+                    {/* Clean, Bright, Crisp Course Thumbnail without any dark overlay */}
                     <div
                       className="relative w-full overflow-hidden bg-[#eef4f0]"
                       style={{ aspectRatio: '116501 / 65024' }}
@@ -5286,29 +5286,22 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
                           }
                         }}
                       />
-                      {/* Dark Gradient Overlay for High-Contrast Text & Badges */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/40 pointer-events-none" />
-
-                      <div className="absolute inset-0 flex flex-col justify-between p-3 sm:p-4 pointer-events-none">
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="flex flex-wrap gap-1">
-                            <span className="rounded-full bg-[#006d77] px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-white shadow-xs">
-                              {course.program_type || 'Dars'}
-                            </span>
-                            <span className="rounded-full bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-[#006d77] truncate max-w-[80px] sm:max-w-none shadow-xs">
-                              {course.faculty}
-                            </span>
-                          </div>
-                          <span className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-white/85 backdrop-blur-xs text-[#006d77] shadow-xs">
-                            <BookOpen className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </span>
-                        </div>
-                        <p className="mt-2 sm:mt-10 text-[10px] sm:text-xs font-semibold text-white/95 drop-shadow-xs truncate">
-                          {course.duration}
-                        </p>
-                      </div>
                     </div>
                     <div className="flex flex-1 flex-col p-3 sm:p-5 text-left">
+                      {/* Clean Badges Above Title */}
+                      <div className="mb-2 sm:mb-3 flex items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-[#006d77] px-2.5 py-0.5 text-[9px] sm:text-[10.5px] font-bold uppercase tracking-wider text-white">
+                            {course.program_type || 'Dars'}
+                          </span>
+                          <span className="rounded-full bg-[#e8f4f0] border border-[#cbe4d7] px-2.5 py-0.5 text-[9px] sm:text-[10.5px] font-bold uppercase tracking-wider text-[#006d77] truncate max-w-[120px] sm:max-w-none">
+                            {course.faculty}
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-xs font-semibold text-[#607568] shrink-0">
+                          {course.duration}
+                        </span>
+                      </div>
                       <h2 className="text-xs sm:text-xl font-semibold leading-tight sm:leading-snug text-[#17382c] line-clamp-2 min-h-[32px] sm:min-h-0">
                         {course.title}
                       </h2>
