@@ -40,9 +40,9 @@ export const Slide10WorkflowPayment: React.FC = () => {
       
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-          Keamanan & Kepastian Kerja
-        </span>
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-emerald-400 font-semibold">
+          Keamanan &amp; Kepastian Kerja
+        </p>
         <h3 className="font-display font-bold text-2xl sm:text-3xl text-white mt-3">
           Alur Pengerjaan Transparan & Skema Termin Aman
         </h3>

@@ -14,9 +14,9 @@ export const Slide04PackagesOverview: React.FC<SlideProps> = ({ onJumpToSlide })
       
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-emerald-400 font-semibold">
           3 Pilihan Paket Fleksibel
-        </span>
+        </p>
         <h3 className="font-display font-bold text-2xl sm:text-3xl text-white mt-3">
           Pilih Paket yang Paling Sesuai dengan Target Anda
         </h3>
@@ -49,7 +49,7 @@ export const Slide04PackagesOverview: React.FC<SlideProps> = ({ onJumpToSlide })
               <div>
                 {/* Header info */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full ${pkg.colorScheme.badgeBg} ${pkg.colorScheme.badgeText}`}>
+                  <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${pkg.colorScheme.badgeText}`}>
                     {pkg.tagline}
                   </span>
                   <span className="text-xs text-slate-400">Garansi {pkg.bugFixingDays} Hari</span>

@@ -62,17 +62,17 @@ export const PACKAGES: PackageData[] = [
   {
     id: 'standard',
     name: 'Standard',
-    tagline: 'Platform Mandiri Peserta + Mayar.id Otomatis',
+    tagline: 'Platform Mandiri Peserta + Pembayaran Otomatis',
     isRecommended: true,
     price: 3500000,
     formattedPrice: 'Rp 3.500.000',
-    bestFor: 'Pilihan paling ideal jika Al Madroj ingin beroperasi sebagai platform kelas modern sejati: peserta login mandiri, materi terkunci aman, dan pembayaran otomatis via Mayar.id.',
-    laymanPitch: 'Peserta memiliki akun sendiri dan bayar otomatis via QRIS/VA Mayar.id. Begitu bayar berhasil, materi langsung terbuka di dashboard peserta secara urut per bab tanpa perlu kirim bukti transfer manual.',
+    bestFor: 'Pilihan paling ideal jika Al Madroj ingin beroperasi sebagai platform kelas modern sejati: peserta login mandiri, materi terkunci aman, dan pembayaran otomatis terintegrasi.',
+    laymanPitch: 'Peserta memiliki akun sendiri dan bayar otomatis via QRIS / Virtual Account resmi. Begitu bayar berhasil, materi langsung terbuka di dashboard peserta secara urut per bab tanpa perlu kirim bukti transfer manual.',
     roiPitch: 'Menghemat 80% kerepotan operasional harian. Peserta merasa membeli program berbobot tinggi karena memiliki portal belajar eksklusif.',
     bugFixingDays: 30,
     features: [
       'Domain .com gratis untuk 1 tahun pertama',
-      'Integrasi Payment Gateway Otomatis (Mayar.id) - QRIS & Virtual Account',
+      'Integrasi Payment Gateway Otomatis (QRIS & Virtual Account)',
       'Semua fitur lengkap dari Paket Starter',
       'Sistem register dan login akun khusus peserta',
       'Dashboard pribadi peserta untuk melihat kelas yang dimiliki',
@@ -96,16 +96,16 @@ export const PACKAGES: PackageData[] = [
   {
     id: 'pro',
     name: 'Pro LMS',
-    tagline: 'LMS Lengkap, Mayar.id & Sertifikasi Otomatis',
+    tagline: 'LMS Lengkap, Pembayaran & Sertifikasi Otomatis',
     price: 5000000,
     formattedPrice: 'Rp 5.000.000',
-    bestFor: 'Al Madroj yang siap berskala besar dengan sertifikasi otomatis, kuis evaluasi, absensi, pembayaran Mayar.id otomatis, dan keterlibatan banyak pengajar atau mentor.',
+    bestFor: 'Al Madroj yang siap berskala besar dengan sertifikasi otomatis, kuis evaluasi, absensi, pembayaran gateway otomatis, dan keterlibatan banyak pengajar atau mentor.',
     laymanPitch: 'Platform berskala LMS penuh. Peserta menyelesaikan materi, mengerjakan kuis, dan langsung mendapatkan sertifikat digital otomatis. Dilengkapi fitur absensi dan akun khusus pengajar.',
     roiPitch: 'Otomatisasi 100% penerbitan sertifikat dan absensi, siap menangani ratusan hingga ribuan peserta.',
     bugFixingDays: 30,
     features: [
       'Domain .com gratis untuk 1 tahun pertama',
-      'Integrasi Payment Gateway Otomatis (Mayar.id)',
+      'Integrasi Payment Gateway Otomatis',
       'Semua fitur lengkap dari Paket Standard',
       'Progress belajar detail per sub-materi',
       'Sistem kuis dan evaluasi sederhana per kelas',
@@ -133,10 +133,10 @@ export const PACKAGES: PackageData[] = [
 export const ADD_ONS: AddOnItem[] = [
   {
     id: 'payment_gateway_starter',
-    name: 'Payment Gateway Mayar.id (Khusus Starter)',
+    name: 'Payment Gateway Otomatis (Khusus Starter)',
     price: 750000,
     formattedPrice: '+ Rp 750.000',
-    description: 'Integrasi Mayar.id untuk paket Starter (sudah termasuk otomatis di Standard dan Pro).',
+    description: 'Integrasi payment gateway untuk paket Starter (sudah termasuk otomatis di Standard dan Pro).',
     benefit: 'Peserta langsung aktif otomatis setelah pembayaran QRIS/VA.'
   },
   {
@@ -196,8 +196,8 @@ export const COMPARISON_TABLE: FeatureComparisonRow[] = [
     name: 'Sistem pembayaran',
     laymanDescription: 'Metode pembayaran yang digunakan peserta',
     starter: 'Manual Transfer',
-    standard: 'Mayar.id Otomatis',
-    pro: 'Mayar.id Otomatis'
+    standard: 'Otomatis Realtime',
+    pro: 'Otomatis Realtime'
   },
   {
     category: 'Pembayaran dan Akses',
@@ -312,8 +312,8 @@ export const NOT_INCLUDED_ITEMS = [
     desc: 'Domain .com gratis untuk 1 tahun pertama. Perpanjangan tahun ke-2 dan seterusnya dibayarkan sesuai tarif resmi registrar domain.'
   },
   {
-    title: 'Biaya Transaksi Provider Mayar.id',
-    desc: 'Biaya per transaksi dari penyedia Mayar.id.'
+    title: 'Biaya Transaksi Provider Payment Gateway',
+    desc: 'Biaya per transaksi dari penyedia payment gateway.'
   },
   {
     title: 'Layanan Cloud Hosting Khusus',
@@ -345,7 +345,7 @@ export const FAQS: FaqItem[] = [
   },
   {
     question: 'Apakah Paket Standard sudah otomatis payment gateway?',
-    answer: 'Ya, Paket Standard (Rp3,5 Juta) dan Pro LMS (Rp5 Juta) sudah terintegrasi payment gateway Mayar.id sehingga peserta dapat membayar via QRIS/VA dan akun langsung aktif otomatis.',
+    answer: 'Ya, Paket Standard (Rp3,5 Juta) dan Pro LMS (Rp5 Juta) sudah terintegrasi payment gateway otomatis sehingga peserta dapat membayar via QRIS/VA dan akun langsung aktif otomatis.',
     category: 'fitur'
   },
   {

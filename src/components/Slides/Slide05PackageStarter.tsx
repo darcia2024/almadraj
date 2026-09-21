@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ShieldCheck, Clock, Zap, ArrowRight } from 'lucide-react';
+import { Check, ShieldCheck, Clock, Zap, ArrowRight, Lightbulb } from 'lucide-react';
 import { PACKAGES, PAYMENT_SCHEME } from '../../data/proposalData';
 import { sound } from '../../utils/audio';
 
@@ -18,7 +18,7 @@ export const Slide05PackageStarter: React.FC<SlideProps> = ({ onJumpToCalculator
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-cyan-400 font-semibold">
               Paket 1: Paling Ringan Untuk Mulai
             </span>
           </div>
@@ -71,8 +71,9 @@ export const Slide05PackageStarter: React.FC<SlideProps> = ({ onJumpToCalculator
             <p className="text-xs text-slate-300 leading-relaxed mb-3">
               Cocok jika Al Madroj ingin segera memiliki alamat website resmi yang profesional untuk memajang profil pengajar, katalog kelas, dan menerima pendaftaran online secara rapi tanpa perlu mengelola sistem login peserta yang rumit.
             </p>
-            <div className="text-[11px] text-cyan-400/90 font-medium">
-              💡 Akses materi tetap aman diberikan melalui halaman private terkontrol.
+            <div className="text-[11px] text-cyan-400/90 font-medium flex items-center gap-1.5">
+              <Lightbulb className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span>Akses materi tetap aman diberikan melalui halaman private terkontrol.</span>
             </div>
           </div>
 

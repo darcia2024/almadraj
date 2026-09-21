@@ -1761,6 +1761,26 @@
   <script>
     let activeView = 'landing';
 
+    // Auto switch view based on URL
+    document.addEventListener('DOMContentLoaded', () => {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+
+      if (path.includes('belajar') || hash === '#belajar' || hash === '#player' || viewParam === 'player' || viewParam === 'belajar') {
+        switchView('player');
+      } else if (path.includes('dashboard') || hash === '#dashboard' || viewParam === 'dashboard') {
+        switchView('dashboard');
+      } else if (path.includes('admin') || hash === '#admin' || viewParam === 'admin') {
+        switchView('admin');
+      } else if (path.includes('login') || hash === '#login' || viewParam === 'login') {
+        switchView('login');
+      }
+    });
+
+
+
         function switchUdemyTab(tabName) {
       const tabs = ['overview', 'notes', 'resources', 'qa'];
       tabs.forEach(t => {

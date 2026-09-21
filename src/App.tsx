@@ -3,7 +3,12 @@ import { SLIDES, PROPOSAL_META } from './data/proposalData';
 import { Navigation } from './components/Navigation';
 import { SlideControlBar } from './components/SlideControlBar';
 import { ThumbnailDrawer } from './components/ThumbnailDrawer';
-import { ProductDemo } from './components/ProductDemo';
+import { RancanganPage } from './components/RancanganPage';
+import { WebsitePage } from './components/WebsitePage';
+import { ProfilePage } from './components/ProfilePage';
+import { ProductionPlatformPage } from './components/ProductionPlatformPage';
+import { PlatformPage } from './components/PlatformPage';
+import { BookStorePage } from './components/BookStorePage';
 import { sound } from './utils/audio';
 
 // Slides imports
@@ -20,11 +25,18 @@ import { Slide10WorkflowPayment } from './components/Slides/Slide10WorkflowPayme
 import { Slide11FaqScope } from './components/Slides/Slide11FaqScope';
 import { Slide12ClosingCta } from './components/Slides/Slide12ClosingCta';
 
-type ViewMode = 'presentation' | 'document' | 'demo';
+type ViewMode = 'presentation' | 'document' | 'demo' | 'rancangan' | 'website' | 'profile' | 'platform' | 'preview' | 'books';
 
 const getInitialViewMode = (): ViewMode => {
+  if (window.location.pathname === '/buku' || window.location.pathname === '/kitab' || window.location.pathname === '/toko-buku') return 'books';
   if (window.location.pathname === '/demo-pro-lms') return 'demo';
-  return 'presentation';
+  if (window.location.pathname === '/rancangan') return 'rancangan';
+  if (window.location.pathname === '/website') return 'website';
+  if (window.location.pathname === '/profil' || window.location.pathname === '/tentang-kami') return 'profile';
+  if (window.location.pathname === '/ui-preview' || window.location.pathname.startsWith('/ui-preview/')) return 'preview';
+  if (['/login', '/register', '/lupa-password', '/dashboard', '/admin', '/pengaturan', '/transaksi', '/kelas', '/katalog', '/belajar'].includes(window.location.pathname) || /^\/(kelas|katalog|checkout|belajar|pembayaran)\//.test(window.location.pathname)) return 'platform';
+  if (window.location.pathname === '/proposal') return 'presentation';
+  return 'website';
 };
 
 export function App() {
@@ -62,7 +74,7 @@ export function App() {
 
   const handleChangeViewMode = useCallback((mode: ViewMode) => {
     setViewMode(mode);
-    const nextPath = mode === 'demo' ? '/demo-pro-lms' : '/';
+    const nextPath = mode === 'books' ? '/buku' : mode === 'demo' ? '/demo-pro-lms' : mode === 'rancangan' ? '/rancangan' : mode === 'website' ? '/website' : mode === 'profile' ? '/profil' : '/proposal';
     if (window.location.pathname !== nextPath) {
       window.history.pushState(null, '', nextPath);
     }
@@ -221,7 +233,31 @@ export function App() {
   };
 
   if (viewMode === 'demo') {
-    return <ProductDemo onBackToProposal={handleBackToProposal} />;
+    return <ProductionPlatformPage />;
+  }
+
+  if (viewMode === 'rancangan') {
+    return <RancanganPage onBackToProposal={handleBackToProposal} />;
+  }
+
+  if (viewMode === 'website') {
+    return <WebsitePage />;
+  }
+
+  if (viewMode === 'books') {
+    return <BookStorePage />;
+  }
+
+  if (viewMode === 'profile') {
+    return <ProfilePage />;
+  }
+
+  if (viewMode === 'platform') {
+    return <ProductionPlatformPage />;
+  }
+
+  if (viewMode === 'preview') {
+    return <PlatformPage />;
   }
 
   return (

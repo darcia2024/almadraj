@@ -35,11 +35,11 @@ export const Slide12ClosingCta: React.FC<SlideProps> = ({ onJumpToCalculator }) 
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center text-center py-6 sm:py-10">
       
-      {/* Eyebrow badge */}
-      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase tracking-widest mb-6">
-        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+      {/* Elegant Eyebrow */}
+      <p className="flex items-center gap-2 text-emerald-400 text-xs font-mono uppercase tracking-[0.22em] font-semibold mb-6">
+        <Sparkles className="w-3.5 h-3.5" />
         <span>Langkah Selanjutnya</span>
-      </div>
+      </p>
 
       {/* Headline */}
       <h2 className="font-display font-extrabold text-3xl sm:text-5xl text-white max-w-3xl leading-tight mb-4">

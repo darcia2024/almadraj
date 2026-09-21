@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, ArrowUpRight, CheckCircle, ShieldCheck, Zap } from 'lucide-react';
+import { Layers, ArrowUpRight, CheckCircle, ShieldCheck, Zap, Target } from 'lucide-react';
 
 export const Slide03Philosophy: React.FC = () => {
   return (
@@ -7,9 +7,9 @@ export const Slide03Philosophy: React.FC = () => {
       
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-10">
-        <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
-          Konsep & Filosofi Penawaran
-        </span>
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-cyan-400 font-semibold">
+          Konsep &amp; Filosofi Penawaran
+        </p>
         <h3 className="font-display font-bold text-2xl sm:text-3xl text-white mt-3">
           Tumbuh Bertahap: Mulai dari yang Pas, Kembangkan Saat Siap
         </h3>
@@ -25,8 +25,8 @@ export const Slide03Philosophy: React.FC = () => {
         <div className="p-6 rounded-3xl bg-slate-900/80 border border-white/10 relative flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">
-                FASE 1: ETALASE
+              <span className="text-xs font-mono font-bold tracking-wider text-slate-400">
+                FASE 1: WEBSITE RESMI
               </span>
               <span className="text-xs text-slate-500">Starter</span>
             </div>
@@ -36,8 +36,9 @@ export const Slide03Philosophy: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-white/5 text-xs text-slate-300 font-medium">
-            🎯 Target: Validasi pasar & hemat waktu rekap pendaftar.
+          <div className="mt-6 pt-4 border-t border-white/5 text-xs text-slate-300 font-medium flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Target: Validasi pasar & hemat waktu rekap pendaftar.</span>
           </div>
         </div>
 
@@ -49,7 +50,7 @@ export const Slide03Philosophy: React.FC = () => {
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+              <span className="text-xs font-mono font-bold tracking-wider text-emerald-400">
                 FASE 2: PORTAL MANDIRI
               </span>
               <span className="text-xs text-emerald-400 font-semibold">Standard</span>
@@ -60,8 +61,9 @@ export const Slide03Philosophy: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-emerald-500/20 text-xs text-emerald-300 font-medium">
-            🎯 Target: Otomasi materi & proteksi konten pembelajaran.
+          <div className="mt-6 pt-4 border-t border-emerald-500/20 text-xs text-emerald-300 font-medium flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Target: Otomasi materi & proteksi konten pembelajaran.</span>
           </div>
         </div>
 
@@ -69,7 +71,7 @@ export const Slide03Philosophy: React.FC = () => {
         <div className="p-6 rounded-3xl bg-slate-900/80 border border-white/10 relative flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+              <span className="text-xs font-mono font-bold tracking-wider text-amber-400">
                 FASE 3: LMS PENUH
               </span>
               <span className="text-xs text-slate-500">Pro LMS</span>
@@ -80,8 +82,9 @@ export const Slide03Philosophy: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-white/5 text-xs text-slate-300 font-medium">
-            🎯 Target: Operasional autopilot tanpa tambah tenaga staf.
+          <div className="mt-6 pt-4 border-t border-white/5 text-xs text-slate-300 font-medium flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Target: Operasional autopilot tanpa tambah tenaga staf.</span>
           </div>
         </div>
 

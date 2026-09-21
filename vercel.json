@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/belajar",
+      "destination": "/belajar.html"
+    },
+    {
+      "source": "/almadraj/belajar",
+      "destination": "/belajar.html"
+    },
+    {
+      "source": "/almadroj/belajar",
+      "destination": "/belajar.html"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     },
@@ -46,7 +58,47 @@
     },
     {
       "source": "/login",
-      "destination": "/masuk.html"
+      "destination": "/index.html"
+    },
+    {
+      "source": "/register",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pengaturan",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/transaksi",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/lupa-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/kelas/:course*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/checkout/:course*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pembayaran/:order*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/belajar/:course*",
+      "destination": "/index.html"
     },
     {
       "source": "/capster",
@@ -83,6 +135,18 @@
     {
       "source": "/proposal",
       "destination": "/proposal.html"
+    },
+    {
+      "source": "/rancangan",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/website",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/ui-preview",
+      "destination": "/index.html"
     }
   ],
   "headers": [

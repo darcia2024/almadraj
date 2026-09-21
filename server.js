@@ -22,10 +22,12 @@ const MIME_TYPES = {
 const server = http.createServer((req, res) => {
   let reqPath = req.url.split('?')[0];
 
-  if (reqPath === '/demo' || reqPath === '/demo/' || reqPath === '/almadraj/demo' || reqPath === '/almadraj/demo/') {
+  if (reqPath === '/belajar' || reqPath === '/belajar/' || reqPath === '/almadraj/belajar' || reqPath === '/almadraj/belajar/') {
+    reqPath = '/belajar.html';
+  } else if (reqPath === '/demo' || reqPath === '/demo/' || reqPath === '/almadraj/demo' || reqPath === '/almadraj/demo/') {
     reqPath = '/demo.html';
   } else if (reqPath === '/' || reqPath === '' || reqPath === '/almadraj' || reqPath === '/almadraj/') {
-    reqPath = '/proposal.html';
+    reqPath = '/index.html';
   }
 
   let filePath = path.join(__dirname, reqPath);

@@ -16,9 +16,9 @@ export const Slide11FaqScope: React.FC = () => {
       
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
-          Kejelasan & Integritas Kerja
-        </span>
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-cyan-400 font-semibold">
+          Kejelasan &amp; Integritas Kerja
+        </p>
         <h3 className="font-display font-bold text-2xl sm:text-3xl text-white mt-3">
           Transparansi Scope & Hal yang Perlu Diketahui
         </h3>

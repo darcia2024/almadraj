@@ -13,11 +13,11 @@ export const Slide01Cover: React.FC<SlideProps> = ({ onNext, onOpenDemo }) => {
   return (
     <div className="w-full max-w-5xl mx-auto flex flex-col items-center justify-center text-center py-6 sm:py-12">
       
-      {/* Eyebrow badge */}
-      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase tracking-widest mb-6 animate-pulse">
-        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+      {/* Elegant Eyebrow */}
+      <p className="flex items-center gap-2 text-emerald-400 text-xs font-mono uppercase tracking-[0.22em] font-semibold mb-6">
+        <Sparkles className="w-3.5 h-3.5" />
         <span>Dokumen Resmi Penawaran Platform Digital</span>
-      </div>
+      </p>
 
       {/* Main Title */}
       <h1 className="font-display font-extrabold text-4xl sm:text-6xl lg:text-7xl tracking-tight text-white max-w-4xl leading-[1.1] mb-6">

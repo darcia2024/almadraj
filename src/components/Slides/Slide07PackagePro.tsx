@@ -18,8 +18,8 @@ export const Slide07PackagePro: React.FC<SlideProps> = ({ onJumpToCalculator }) 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-amber-300 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30 font-bold">
-              Paket 3: LMS Penuh & Otomasi Skala Besar
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-amber-400 font-bold">
+              Paket 3: LMS Penuh &amp; Otomasi Skala Besar
             </span>
           </div>
           <h3 className="font-display font-bold text-3xl sm:text-4xl text-white">

@@ -196,7 +196,7 @@ export const ProductDemo: React.FC<ProductDemoProps> = ({ onBackToProposal }) =>
             <motion.div key={screen} {...pageMotion}>
               {screen === 'dashboard' && <DashboardScreen go={go} />}
               {screen === 'catalog' && <CatalogScreen search={catalogSearch} setSearch={setCatalogSearch} items={visibleCourses} checkout={(course) => { setSelectedCourse(course); setCheckoutSubmitted(false); go('checkout'); }} />}
-              {screen === 'checkout' && <CheckoutScreen course={selectedCourse} payment={paymentMethod} setPayment={setPaymentMethod} submitted={checkoutSubmitted} submit={() => { setCheckoutSubmitted(true); setToast('Pendaftaran diterima. Invoice Mayar.id siap diproses.'); }} back={() => go('catalog')} />}
+              {screen === 'checkout' && <CheckoutScreen course={selectedCourse} payment={paymentMethod} setPayment={setPaymentMethod} submitted={checkoutSubmitted} submit={() => { setCheckoutSubmitted(true); setToast('Pendaftaran diterima. Tagihan pembayaran siap diproses.'); }} back={() => go('catalog')} />}
               {screen === 'learning' && <LearningScreen active={activeLesson} moduleOpen={moduleOpen} toggleModule={() => setModuleOpen((value) => !value)} setActive={setActiveLesson} goQuiz={() => go('quiz')} message={setToast} />}
               {screen === 'quiz' && <QuizScreen answers={quizAnswers} submitted={quizSubmitted} answer={(question, value) => setQuizAnswers((current) => ({ ...current, [question]: value }))} submit={() => { setQuizSubmitted(true); setToast('Jawaban tersimpan di laporan peserta.'); }} />}
               {screen === 'admin' && <AdminScreen search={adminSearch} setSearch={setAdminSearch} items={visibleParticipants} status={adminState} refresh={refreshAdmin} message={setToast} />}
@@ -339,7 +339,7 @@ const CheckoutScreen = ({ course, payment, setPayment, submitted, submit, back }
         <p className="text-xs font-semibold text-[#afc1b9]">Ringkasan pesanan</p><h3 className="mt-3 text-2xl font-bold">{course.title}</h3><p className="mt-2 text-sm text-[#afc1b9]">{course.duration} · {course.schedule}</p>
         <div className="my-6 space-y-3 border-y border-white/12 py-5 text-sm"><div className="flex justify-between"><span className="text-[#afc1b9]">Biaya kelas</span><span>{course.price}</span></div><div className="flex justify-between"><span className="text-[#afc1b9]">Biaya layanan</span><span>Rp0</span></div></div>
         <div className="flex items-end justify-between"><span className="text-sm text-[#afc1b9]">Total pembayaran</span><span className="text-2xl font-bold">{course.price}</span></div>
-        <div className="mt-7 flex gap-3 rounded-md bg-white/8 p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-[#f2b84b]" /><p className="text-xs leading-5 text-[#c6d2cd]">Diproses melalui Mayar.id. Materi terbuka otomatis setelah transaksi berhasil.</p></div>
+        <div className="mt-7 flex gap-3 rounded-md bg-white/8 p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-[#f2b84b]" /><p className="text-xs leading-5 text-[#c6d2cd]">Pembayaran otomatis via QRIS / Virtual Account. Materi terbuka otomatis setelah transaksi berhasil.</p></div>
       </aside>
     </div>
   );

@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-Thin.otf') format('opentype');
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-Medium.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-Medium.otf') format('opentype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-SemiBold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-Bold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ES Rebond Grotesque';
+  src: url('/fonts/ESRebond-ExtraBold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -71,6 +119,261 @@
   border-color: #374151;
 }
 
+/* Keep the product surfaces compact while preserving a clear type hierarchy. */
+.platform-compact .text-6xl,
+.platform-compact [class~="sm:text-6xl"] {
+  font-size: 3rem !important;
+  line-height: 1.06 !important;
+}
+
+.platform-compact .text-5xl,
+.platform-compact [class~="sm:text-5xl"] {
+  font-size: 2.5rem !important;
+  line-height: 1.1 !important;
+}
+
+.platform-compact .text-4xl {
+  font-size: 2.15rem !important;
+  line-height: 1.12 !important;
+}
+
+.platform-compact .text-3xl {
+  font-size: 1.75rem !important;
+  line-height: 1.16 !important;
+}
+
+.platform-compact [class~="p-10"],
+.platform-compact [class~="sm:p-10"] {
+  padding: 2rem !important;
+}
+
+.platform-compact [class~="p-9"],
+.platform-compact [class~="sm:p-9"] {
+  padding: 1.75rem !important;
+}
+
+.platform-compact [class~="p-8"],
+.platform-compact [class~="sm:p-8"] {
+  padding: 1.5rem !important;
+}
+
+.platform-compact [class~="p-7"],
+.platform-compact [class~="sm:p-7"] {
+  padding: 1.35rem !important;
+}
+
+.platform-compact .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.25rem !important;
+}
+
+.platform-compact .space-y-7 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.1rem !important;
+}
+
+.platform-compact .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem !important;
+}
+
+.platform-compact .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.9rem !important;
+}
+
+/* Icons read better as marks than as nested mini-cards. */
+.platform-compact span:has(> svg:only-child),
+.website-page span:has(> svg:only-child) {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+}
+
+.platform-compact button[aria-label]:has(> svg:only-child):not([aria-label*="Tutup"]):not([aria-label="Buka navigasi"]):not([aria-label="Notifikasi"]):not([aria-label="Keluar"]) {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+}
+
+.platform-compact button[aria-label="Notifikasi"],
+.platform-compact button[aria-label="Keluar"] {
+  border-radius: 9999px !important;
+}
+
+/* Tighten repeated controls and spacing without shrinking readable text. */
+.platform-compact [class~="min-h-12"] { min-height: 2.75rem !important; }
+.platform-compact [class~="min-h-11"] { min-height: 2.5rem !important; }
+.platform-compact [class~="min-h-10"] { min-height: 2.25rem !important; }
+.platform-compact [class~="p-6"] { padding: 1.15rem !important; }
+.platform-compact [class~="p-5"] { padding: 1rem !important; }
+.platform-compact [class~="gap-8"] { gap: 1.25rem !important; }
+.platform-compact [class~="gap-7"] { gap: 1.1rem !important; }
+.platform-compact [class~="gap-6"] { gap: 1rem !important; }
+.platform-compact [class~="gap-5"] { gap: 0.85rem !important; }
+.platform-compact [class~="h-14"][class~="w-14"] { height: 3.25rem !important; width: 3.25rem !important; }
+.platform-compact [class~="min-h-[72px]"] { min-height: 4.25rem !important; }
+.platform-compact [class~="min-h-[76px]"] { min-height: 4.35rem !important; }
+.platform-compact [class~="w-[244px]"] { width: 220px !important; }
+
+/* Keep platform pages open and editorial instead of stacking framed cards. */
+.platform-compact :is(section, article, aside):not([role="dialog"]):not([role="dialog"] *):not(.notification-dropdown-panel)[class*="rounded"][class*="border"][class*="bg-white"] {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.platform-compact :is(section, article, aside):not([role="dialog"]):not([role="dialog"] *):not(.notification-dropdown-panel)[class*="rounded"][class*="border"] {
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Notification dropdown panel must always be an opaque, framed floating surface */
+.platform-compact .notification-dropdown-panel,
+.notification-dropdown-panel {
+  border-color: #d8e6dc !important;
+  background-color: #ffffff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 20px 55px -10px rgba(16, 44, 34, 0.2), 0 4px 16px -4px rgba(0, 0, 0, 0.06) !important;
+  opacity: 1 !important;
+}
+
+/* Profile editor keeps its own readable surface above the platform canvas. */
+.platform-compact [aria-labelledby="profile-editor-title"] > section {
+  border-color: #dce9df !important;
+  background-color: #fff !important;
+  border-radius: 22px !important;
+  box-shadow: 0 24px 70px rgba(16, 44, 34, 0.18) !important;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] {
+  background-color: rgba(16, 44, 34, 0.62) !important;
+  backdrop-filter: blur(6px);
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] > section {
+  max-width: 34rem !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] > section > div:first-child {
+  align-items: center;
+  border-bottom: 1px solid #e5eee8;
+  padding: 1.75rem 2rem 1.25rem;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] form {
+  margin-top: 0 !important;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child {
+  border-bottom: 1px solid #e5eee8;
+  border-radius: 0;
+  background: #fff;
+  padding: 1.5rem 2rem;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child > div:first-child img,
+.platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child > div:first-child > span {
+  height: 6rem !important;
+  width: 6rem !important;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] form > div:last-child {
+  align-items: center;
+  background: #f5fbf7;
+  padding: 1.25rem 2rem;
+}
+
+.platform-compact [aria-labelledby="profile-editor-title"] form > div:last-child button:last-child {
+  min-width: 12rem;
+}
+
+/* Account settings need framed groups so the fields are easy to scan. */
+.platform-compact main > .max-w-2xl > section {
+  border-color: #d4e1d8 !important;
+  background-color: #fff !important;
+  border-radius: 18px !important;
+  box-shadow: 0 12px 30px rgba(35, 77, 53, 0.05) !important;
+}
+
+.platform-compact main > .max-w-2xl > section:last-child {
+  background-color: #f5fbf7 !important;
+}
+
+@media (max-width: 520px) {
+  .platform-compact [aria-labelledby="profile-editor-title"] > section {
+    max-width: 100% !important;
+  }
+
+  .platform-compact [aria-labelledby="profile-editor-title"] > section > div:first-child,
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child,
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:last-child {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:last-child button:last-child {
+    width: 100%;
+  }
+}
+
+@media (min-width: 640px) {
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child > div:first-child img,
+  .platform-compact [aria-labelledby="profile-editor-title"] form > div:first-child > div:first-child > span {
+    height: 7rem !important;
+    width: 7rem !important;
+  }
+}
+
+.website-page article[class*="rounded"][class*="border"] {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.website-page article.mockup-shell {
+  border-color: #075447 !important;
+  background-color: #075447 !important;
+  border-radius: 30px !important;
+  box-shadow: 0 24px 60px rgba(7, 84, 71, 0.2) !important;
+}
+
+.website-page article.testimonial-card {
+  border-color: #c5e0cf !important;
+  background-color: #e8f5ed !important;
+  border-radius: 22px !important;
+  box-shadow: 0 10px 24px rgba(7, 84, 71, 0.06) !important;
+}
+
+/* Restore framed surfaces only where they carry a real task or data group. */
+.platform-compact .surface-restore :is(section, article, aside)[class*="rounded"][class*="border"][class*="bg-white"],
+.platform-compact .surface-restore :is(section, article, aside)[class*="rounded"][class*="border"] {
+  border-color: #d4e1d8 !important;
+  background-color: #fff !important;
+  border-radius: 18px !important;
+  box-shadow: 0 12px 30px rgba(35, 77, 53, 0.05) !important;
+}
+
+.website-page [class~="text-[clamp(2.8rem,6.5vw,6.8rem)"] {
+  font-size: clamp(2.5rem, 5.5vw, 5.2rem) !important;
+}
+
+.website-page [class~="sm:text-6xl"] {
+  font-size: 3.5rem !important;
+  line-height: 1.02 !important;
+}
+
+.website-page [class~="sm:py-24"] {
+  padding-top: 4.5rem !important;
+  padding-bottom: 4.5rem !important;
+}
+
 @keyframes fadeInSimple {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -78,6 +381,79 @@
 
 .animate-slide-in {
   animation: fadeInSimple 0.25s ease-out forwards;
+}
+
+.restricted-player-range {
+  height: 4px;
+  cursor: pointer;
+  appearance: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  accent-color: #8de0c0;
+}
+
+.restricted-player-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  appearance: none;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #8de0c0;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.32);
+}
+
+.restricted-player-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #8de0c0;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.32);
+}
+
+.restricted-player-range:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 4px;
+}
+
+.website-page,
+.bookstore-page {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.website-page :is(h1, h2, h3, h4, h5, h6),
+.bookstore-page :is(h1, h2, h3, h4, h5, h6) {
+  font-family: 'ES Rebond Grotesque', 'Plus Jakarta Sans', sans-serif;
+}
+
+.website-page [class*="text-[#247d48]"] {
+  color: #027680 !important;
+}
+
+.website-page [class*="bg-[#247d48]"] {
+  background-color: #027680 !important;
+}
+
+.website-page [class*="hover:bg-[#1c6339]"]:hover {
+  background-color: #01757f !important;
+}
+
+.website-page [class*="hover:border-[#247d48]"]:hover {
+  border-color: #027680 !important;
+}
+
+/* Keep the public landing page and bookstore readable on wide screens instead of stretching edge to edge. */
+.website-page [class~="max-w-[1320px]"],
+.bookstore-page [class~="max-w-[1320px]"] {
+  max-width: 1160px !important;
+}
+
+.website-page [class*="border-[#b8d8c0]"] {
+  border-color: #b7e7d4 !important;
+}
+
+.website-page [class*="border-[#c2dfca]"] {
+  border-color: #b7e7d4 !important;
 }
 
 @media print {

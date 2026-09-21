@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Star, ShieldCheck, Zap, ArrowRight, UserCheck, Lock, PlayCircle } from 'lucide-react';
+import { Check, Star, ShieldCheck, Zap, ArrowRight, UserCheck, Lock, PlayCircle, Lightbulb } from 'lucide-react';
 import { PACKAGES, PAYMENT_SCHEME } from '../../data/proposalData';
 import { sound } from '../../utils/audio';
 
@@ -18,7 +18,7 @@ export const Slide06PackageStandard: React.FC<SlideProps> = ({ onJumpToCalculato
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/40 flex items-center gap-1.5 font-bold">
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-1.5 font-bold">
               <Star className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
               <span>Paket 2: Paling Direkomendasikan (Sweet Spot)</span>
             </span>
@@ -93,8 +93,9 @@ export const Slide06PackageStandard: React.FC<SlideProps> = ({ onJumpToCalculato
           
           {/* Mengapa ini Paling Direkomendasikan */}
           <div className="p-5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
-            <h5 className="font-display font-bold text-sm text-emerald-300 mb-2">
-              💡 Mengapa Ini Pilihan Paling Cerdas?
+            <h5 className="font-display font-bold text-sm text-emerald-300 mb-2 flex items-center gap-1.5">
+              <Lightbulb className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Mengapa Ini Pilihan Paling Cerdas?</span>
             </h5>
             <p className="text-xs text-slate-300 leading-relaxed mb-2">
               Paket ini memberikan pengalaman platform kelas modern sejati tanpa biaya tinggi. Peserta merasa sangat puas karena belajar di portal tersendiri, dan admin tidak lagi pusing mengurus manual link di WhatsApp.

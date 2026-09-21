@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, ShieldAlert, CheckCircle2, TrendingUp, Sparkles, Users } from 'lucide-react';
+import { Clock, ShieldAlert, CheckCircle2, TrendingUp, Sparkles, Users, AlertTriangle } from 'lucide-react';
 
 export const RoiSimulator: React.FC = () => {
   return (
@@ -7,9 +7,9 @@ export const RoiSimulator: React.FC = () => {
       
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-emerald-400 font-semibold">
           Dampak Nyata Terhadap Operasional
-        </span>
+        </p>
         <h3 className="font-display font-bold text-2xl sm:text-3xl text-white mt-3">
           Mengapa Platform Ini adalah Investasi Menguntungkan?
         </h3>
@@ -49,8 +49,9 @@ export const RoiSimulator: React.FC = () => {
             </ul>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs text-center font-medium">
-            ⚠️ Membuang 20-30 jam waktu kerja staf admin setiap ada batch kelas baru
+          <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs text-center font-medium flex items-center justify-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Membuang 20-30 jam waktu kerja staf admin setiap ada batch kelas baru</span>
           </div>
         </div>
 
@@ -82,8 +83,9 @@ export const RoiSimulator: React.FC = () => {
             </ul>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs text-center font-semibold">
-            ✨ Hemat hingga 80% waktu operasional + siap menampung ribuan peserta
+          <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs text-center font-semibold flex items-center justify-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Hemat hingga 80% waktu operasional + siap menampung ribuan peserta</span>
           </div>
         </div>
 

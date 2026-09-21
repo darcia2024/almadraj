@@ -1,5 +1,6 @@
 .vercel
 .env*
+!.env.example
 
 # PIN kasir tidak pernah boleh masuk repositori
 pin_kasir.txt
@@ -9,6 +10,7 @@ KREDENSIAL.md
 
 node_modules
 dist
+screenshots
 logo_base64.txt
 
 assign-prod-dardevkonsep.js
