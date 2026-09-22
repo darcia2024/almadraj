@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, Bell, Bookmark, BookOpen, CalendarDays, Camera, Check,
-  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, Copy, CreditCard, Download, Eye, FileCheck, FileText,
+  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, Copy, CreditCard, Download, Eye, EyeOff, FileCheck, FileText,
   Flame, GraduationCap, Headphones, ImageIcon, LayoutDashboard, Lock, LockKeyhole, LogOut, Maximize, Menu,
-  MessageCircle, Minimize, MoreHorizontal, Music, Pause, Pencil, Play, Plus, Printer, RefreshCw, RotateCcw,
+  MessageCircle, Minimize, MoreHorizontal, Music, Pause, Pencil, Play, Plus, Printer, Quote, RefreshCw, RotateCcw,
   RotateCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Target, Trash2,
   UserRound, UsersRound, Video, Volume2, VolumeX, X
 } from 'lucide-react';
@@ -11,6 +11,15 @@ import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
 import { MayarPaymentModal } from './MayarPaymentModal';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
+import {
+  TestimonialItem,
+  loadTestimonials,
+  saveTestimonial,
+  deleteTestimonial,
+  getStoredTestimonials,
+  setStoredTestimonials,
+  DEFAULT_TESTIMONIALS
+} from '../data/testimonialsData';
 
 type ProgramType = 'Dars' | 'Bimbel';
 type Course = {
@@ -4690,7 +4699,7 @@ type ProductionAdminOrder = { id: string; amount: number; status: string; provid
 type ProductionAdminProgress = LessonProgress & { user_id: string };
 
 const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: string) => void; user?: { id: string; email?: string } | null; profile?: Profile | null }) => {
-  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions' | 'gateway';
+  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions' | 'gateway' | 'testimonials';
   type CourseModalTab = 'identity' | 'media' | 'coordinator';
 
   type CourseDraft = {
@@ -4750,6 +4759,12 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [accessView, setAccessView] = useState<'users' | 'enrollments'>('users');
   const [orderSearch, setOrderSearch] = useState('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [testimonialsList, setTestimonialsList] = useState<TestimonialItem[]>(() => getStoredTestimonials());
+  const [editingTestimonial, setEditingTestimonial] = useState<TestimonialItem | null>(null);
+  const [isCreatingTestimonial, setIsCreatingTestimonial] = useState(false);
+  const [testimonialSearch, setTestimonialSearch] = useState('');
+  const [testimonialStatusFilter, setTestimonialStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
+  const [copiedTestiSql, setCopiedTestiSql] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -4849,6 +4864,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       setEnrollments((enrollmentResult.data || []).map((item: any) => ({ ...item, profiles: item.profiles?.[0], courses: item.courses?.[0] })) as ProductionAdminEnrollment[]);
       setOrders((orderResult.data || []).map((item: any) => ({ ...item, profiles: item.profiles?.[0], courses: item.courses?.[0] })) as ProductionAdminOrder[]);
       setProgressRows((progressResult.data || []) as ProductionAdminProgress[]);
+      loadTestimonials().then((items) => { if (items && items.length) setTestimonialsList(items); }).catch(() => null);
     } catch (loadError) {
       onError(loadError instanceof Error ? loadError.message : 'Data operasional gagal dimuat.');
     } finally {
@@ -4884,11 +4900,90 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     window.addEventListener('al-madraj-content-file', handleFile);
     return () => window.removeEventListener('al-madraj-content-file', handleFile);
   }, []);
+  useEffect(() => {
+    const handleTestiUpdate = () => setTestimonialsList(getStoredTestimonials());
+    window.addEventListener('almadraj_testimonials_updated', handleTestiUpdate);
+    return () => window.removeEventListener('almadraj_testimonials_updated', handleTestiUpdate);
+  }, []);
 
   const recordAudit = async (action: string, entityType: string, entityId?: string, metadata: Record<string, unknown> = {}) => {
     try {
       await requireSupabase().from('admin_audit_logs').insert({ action, entity_type: entityType, entity_id: entityId || null, metadata });
     } catch {}
+  };
+
+  const handleSaveTestimonialItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTestimonial) return;
+    if (!editingTestimonial.name.trim()) {
+      onError('Nama santri / mahasiswa wajib diisi.');
+      return;
+    }
+    if (!editingTestimonial.quote.trim()) {
+      onError('Isi kutipan / ulasan testimoni wajib diisi.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const initials = (editingTestimonial.initials || '').trim() ||
+        editingTestimonial.name.trim().split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'AL';
+
+      const payload: TestimonialItem = {
+        ...editingTestimonial,
+        name: editingTestimonial.name.trim(),
+        initials,
+        role: editingTestimonial.role.trim(),
+        university: (editingTestimonial.university || '').trim(),
+        tag: (editingTestimonial.tag || 'Masisir Kairo').trim(),
+        course: (editingTestimonial.course || '').trim(),
+        year: (editingTestimonial.year || '').trim(),
+        rating: Math.max(1, Math.min(5, Number(editingTestimonial.rating) || 5)),
+        avatarColor: editingTestimonial.avatarColor || 'from-[#006d77] to-[#148369]',
+        avatar_url: (editingTestimonial.avatar_url || '').trim(),
+        quote: editingTestimonial.quote.trim(),
+        is_active: editingTestimonial.is_active,
+        sort_order: Number(editingTestimonial.sort_order) || testimonialsList.length + 1,
+      };
+
+      await saveTestimonial(payload);
+      setTestimonialsList(getStoredTestimonials());
+      setEditingTestimonial(null);
+      setIsCreatingTestimonial(false);
+      await recordAudit('testimonial.saved', 'testimonial', payload.id, { name: payload.name });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal menyimpan testimoni');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleTestimonialStatus = async (item: TestimonialItem) => {
+    try {
+      const updated = { ...item, is_active: !item.is_active };
+      await saveTestimonial(updated);
+      setTestimonialsList(getStoredTestimonials());
+      await recordAudit('testimonial.status_toggled', 'testimonial', item.id, { name: item.name, is_active: updated.is_active });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal memperbarui status testimoni');
+    }
+  };
+
+  const handleDeleteTestimonialItem = async (id: string, name: string) => {
+    if (!window.confirm(`Hapus testimoni dari "${name}"? Testimoni ini tidak akan tampil lagi di Landing Page.`)) return;
+    try {
+      await deleteTestimonial(id);
+      setTestimonialsList(getStoredTestimonials());
+      await recordAudit('testimonial.deleted', 'testimonial', id, { name });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal menghapus testimoni');
+    }
+  };
+
+  const handleResetTestimonialsList = () => {
+    if (!window.confirm('Kembalikan daftar testimoni ke 6 testimoni bawaan awal Masisir Kairo?')) return;
+    setStoredTestimonials(DEFAULT_TESTIMONIALS);
+    setTestimonialsList(DEFAULT_TESTIMONIALS);
   };
 
   const startCourse = (course?: ProductionAdminCourse, initialModalTab: CourseModalTab = 'identity') => {
@@ -5197,6 +5292,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           { id: 'participants' as const, label: 'Peserta & Akses', icon: GraduationCap, count: profiles.length },
           { id: 'transactions' as const, label: 'Transaksi & Keuangan', icon: CreditCard, count: orders.length },
           { id: 'gateway' as const, label: 'Integrasi Mayar', icon: ShieldCheck, count: 'Mayar.id' },
+          { id: 'testimonials' as const, label: 'Kelola Testimoni', icon: Quote, count: testimonialsList.length },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = tab === item.id;
@@ -6325,6 +6421,336 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
               </div>
             );
           })()}
+          {tab === 'testimonials' && (
+            <div className="space-y-6">
+              {/* Header with Stats & Actions */}
+              <div className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                        <Quote className="h-4 w-4" />
+                      </span>
+                      <h2 className="text-lg sm:text-xl font-bold text-[#112d22]">
+                        Kelola Testimoni Mahasiswa &amp; Santri
+                      </h2>
+                    </div>
+                    <p className="text-xs text-[#6c8577] mt-1 max-w-2xl leading-relaxed">
+                      Atur kutipan, ulasan, bintang rating, dan foto/avatar mahasiswa Al-Azhar yang tampil di bagian testimoni Landing Page Al Madraj.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handleResetTestimonialsList}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#dce9df] bg-white px-3.5 py-2 text-xs font-bold text-[#5c7768] hover:bg-[#f3f7f4] transition cursor-pointer"
+                      title="Kembalikan ke data bawaan"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Reset Bawaan</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTestimonial({
+                          id: 'testi-' + Date.now(),
+                          name: '',
+                          initials: '',
+                          role: 'Fakultas Syariah Islamiyyah (FSI)',
+                          university: 'Tingkat 3 · Darrasa, Kairo',
+                          tag: 'Masisir Kairo',
+                          course: courses[0]?.title || 'Kajian Fikih Matan Abi Syuja',
+                          year: 'Masisir 2024',
+                          rating: 5,
+                          avatarColor: 'from-[#006d77] to-[#148369]',
+                          avatar_url: '',
+                          quote: '',
+                          is_active: true,
+                          sort_order: testimonialsList.length + 1,
+                        });
+                        setIsCreatingTestimonial(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#005259] transition cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Tambah Testimoni</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Stats Summary */}
+                <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-[#edf5f0]">
+                  <div className="rounded-xl border border-[#dce9df] bg-[#f7faf8] p-3.5">
+                    <p className="text-[11px] font-semibold text-[#6c8577]">Total Testimoni</p>
+                    <p className="text-xl font-bold text-[#112d22] mt-0.5">{testimonialsList.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
+                    <p className="text-[11px] font-semibold text-emerald-800">Aktif di Landing Page</p>
+                    <p className="text-xl font-bold text-emerald-900 mt-0.5">
+                      {testimonialsList.filter((t) => t.is_active).length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
+                    <p className="text-[11px] font-semibold text-amber-800">Rata-rata Penilaian</p>
+                    <p className="text-xl font-bold text-amber-900 mt-0.5 flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-amber-500 text-amber-500" />
+                      {testimonialsList.length
+                        ? (
+                            testimonialsList.reduce((acc, t) => acc + (Number(t.rating) || 5), 0) /
+                            testimonialsList.length
+                          ).toFixed(1)
+                        : '5.0'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#dce9df] bg-[#f7faf8] p-3.5">
+                    <p className="text-[11px] font-semibold text-[#6c8577]">Kategori Masisir</p>
+                    <p className="text-xl font-bold text-[#112d22] mt-0.5">
+                      {new Set(testimonialsList.map((t) => t.tag || 'Masisir')).size} Ragam
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-80">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#7c9587]" />
+                  <input
+                    type="text"
+                    value={testimonialSearch}
+                    onChange={(e) => setTestimonialSearch(e.target.value)}
+                    placeholder="Cari nama, fakultas, atau kutipan..."
+                    className="w-full rounded-full border border-[#dce9df] bg-white py-2 pl-9 pr-4 text-xs text-[#112d22] placeholder:text-[#8ba295] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto w-full sm:w-auto">
+                  {(['all', 'active', 'hidden'] as const).map((mode) => {
+                    const count =
+                      mode === 'all'
+                        ? testimonialsList.length
+                        : mode === 'active'
+                        ? testimonialsList.filter((t) => t.is_active).length
+                        : testimonialsList.filter((t) => !t.is_active).length;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setTestimonialStatusFilter(mode)}
+                        className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                          testimonialStatusFilter === mode
+                            ? 'bg-[#006d77] text-white'
+                            : 'bg-white text-[#5c7768] border border-[#dce9df] hover:border-[#006d77]'
+                        }`}
+                      >
+                        {mode === 'all' && `Semua (${count})`}
+                        {mode === 'active' && `Ditampilkan (${count})`}
+                        {mode === 'hidden' && `Disembunyikan (${count})`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Testimonial Cards Grid */}
+              {(() => {
+                const filtered = testimonialsList.filter((item) => {
+                  if (testimonialStatusFilter === 'active' && !item.is_active) return false;
+                  if (testimonialStatusFilter === 'hidden' && item.is_active) return false;
+                  if (testimonialSearch.trim()) {
+                    const q = testimonialSearch.toLowerCase().trim();
+                    const matchesName = (item.name || '').toLowerCase().includes(q);
+                    const matchesRole = (item.role || '').toLowerCase().includes(q);
+                    const matchesUni = (item.university || '').toLowerCase().includes(q);
+                    const matchesQuote = (item.quote || '').toLowerCase().includes(q);
+                    const matchesCourse = (item.course || '').toLowerCase().includes(q);
+                    if (!matchesName && !matchesRole && !matchesUni && !matchesQuote && !matchesCourse) return false;
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-dashed border-[#cfe0d5] bg-[#f7faf8] p-10 text-center">
+                      <Quote className="mx-auto h-8 w-8 text-[#8ca495]" />
+                      <h3 className="mt-3 text-sm font-bold text-[#112d22]">Tidak Ada Testimoni Ditemukan</h3>
+                      <p className="mt-1 text-xs text-[#6c8577]">
+                        {testimonialSearch ? 'Coba ubah kata kunci pencarian Anda.' : 'Belum ada testimoni pada kategori ini.'}
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {filtered.map((item, idx) => (
+                      <div
+                        key={item.id || item.name + idx}
+                        className={`rounded-2xl border bg-white p-5 flex flex-col justify-between transition shadow-xs hover:shadow-md ${
+                          item.is_active ? 'border-[#d8e7dc]' : 'border-amber-200 bg-amber-50/20 opacity-80'
+                        }`}
+                      >
+                        <div>
+                          {/* Top Header: Avatar, Name & Tag */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {item.avatar_url ? (
+                                <img
+                                  src={item.avatar_url}
+                                  alt={item.name}
+                                  className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-xs border border-[#d8e7dc]"
+                                />
+                              ) : (
+                                <div
+                                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr ${
+                                    item.avatarColor || 'from-[#006d77] to-[#148369]'
+                                  } text-xs font-bold text-white shadow-xs`}
+                                >
+                                  {item.initials || (item.name ? item.name.slice(0, 2).toUpperCase() : 'AL')}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-[#143428] truncate">{item.name}</h4>
+                                <p className="text-[11px] text-[#5c7768] truncate">
+                                  {item.role}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-[#edf6f2] px-2 py-0.5 text-[10px] font-bold text-[#006d77]">
+                              {item.tag || 'Masisir'}
+                            </span>
+                          </div>
+
+                          {/* University & Rating */}
+                          <div className="mt-3 flex items-center justify-between border-y border-[#edf5f0] py-2 text-xs">
+                            <div className="flex items-center gap-1">
+                              {[0, 1, 2, 3, 4].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={`h-3 w-3 ${
+                                    s < Math.round(item.rating || 5)
+                                      ? 'fill-[#f59e0b] text-[#f59e0b]'
+                                      : 'fill-transparent text-[#dce9df]'
+                                  }`}
+                                />
+                              ))}
+                              <span className="ml-1 text-[11px] font-bold text-[#143428]">
+                                {(Number(item.rating) || 5).toFixed(1)}
+                              </span>
+                            </div>
+                            <span className="text-[10.5px] text-[#7a9486] truncate max-w-[140px]">
+                              {item.university || item.year}
+                            </span>
+                          </div>
+
+                          {/* Quote */}
+                          <p className="mt-3 text-xs leading-relaxed text-[#3d594b] italic line-clamp-4">
+                            “{item.quote}”
+                          </p>
+                        </div>
+
+                        {/* Footer: Course & Actions */}
+                        <div className="mt-4 pt-3 border-t border-[#edf5f0] space-y-3">
+                          {item.course && (
+                            <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#1e6144] truncate">
+                              <BookOpen className="h-3 w-3 shrink-0 text-[#127a56]" />
+                              <span className="truncate">{item.course}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            {/* Toggle Active Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTestimonialStatus(item)}
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-bold transition cursor-pointer ${
+                                item.is_active
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-stone-100 text-stone-600 border border-stone-200 hover:bg-stone-200'
+                              }`}
+                              title={item.is_active ? 'Klik untuk sembunyikan' : 'Klik untuk tampilkan'}
+                            >
+                              {item.is_active ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                              <span>{item.is_active ? 'Tampil' : 'Disembunyikan'}</span>
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingTestimonial(item);
+                                  setIsCreatingTestimonial(false);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#cfe0d5] bg-white px-2.5 py-1 text-[10.5px] font-bold text-[#006d77] hover:bg-[#edf5f0] transition cursor-pointer"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTestimonialItem(item.id, item.name)}
+                                className="inline-flex items-center justify-center rounded-full h-6 w-6 border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                title="Hapus Testimoni"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Info & SQL Migration Helper Box */}
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-700" />
+                    Penyimpanan &amp; Sinkronisasi Otomatis
+                  </p>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed max-w-2xl">
+                    Perubahan testimoni langsung tersimpan dan langsung muncul di Landing Page. Jika ingin membuat tabel dedicated <code>public.testimonials</code> di database Supabase untuk multi-admin, Anda dapat menjalankan script SQL migration.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sql = `-- Migration: public.testimonials
+create table if not exists public.testimonials (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  initials text,
+  role text not null,
+  university text default '',
+  tag text default 'Masisir Kairo',
+  course text default '',
+  year text default '',
+  rating numeric default 5.0,
+  avatar_color text default 'from-[#006d77] to-[#148369]',
+  avatar_url text default '',
+  quote text not null,
+  is_active boolean default true,
+  sort_order integer default 0,
+  created_at timestamptz default now()
+);
+alter table public.testimonials enable row level security;
+create policy "Public read testimonials" on public.testimonials for select using (true);
+create policy "Admin manage testimonials" on public.testimonials for all using (true);`;
+                    navigator.clipboard.writeText(sql).then(() => {
+                      setCopiedTestiSql(true);
+                      setTimeout(() => setCopiedTestiSql(false), 2500);
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-white px-3.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-50 transition cursor-pointer self-start sm:self-auto shrink-0"
+                >
+                  {copiedTestiSql ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedTestiSql ? 'SQL Tersalin!' : 'Salin Skrip SQL Supabase'}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -6891,6 +7317,271 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                 >
                   <Save className="h-4 w-4" />
                   <span>{saving ? 'Menyimpan...' : 'Simpan Materi'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: TESTIMONIAL EDITOR MODAL                                         */}
+      {/* ========================================================================= */}
+      {editingTestimonial && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-[#102c22]/55 p-3 sm:p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 cursor-default" onClick={() => setEditingTestimonial(null)} />
+          <section className="relative max-h-[94dvh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#dce9df] bg-white shadow-[0_28px_90px_rgba(16,44,34,0.25)] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#e5eee8] px-5 py-4 sm:px-6">
+              <div>
+                <p className="text-[10.5px] font-bold uppercase tracking-wider text-[#006d77]">
+                  {isCreatingTestimonial ? 'Tambah Testimoni Baru' : 'Perbarui Testimoni'}
+                </p>
+                <h2 className="text-lg sm:text-xl font-bold text-[#112d22]">
+                  {editingTestimonial.name || 'Data Testimoni'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTestimonial(null)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:bg-[#edf5f0] hover:text-[#006d77] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveTestimonialItem} className="p-5 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Nama Mahasiswa / Santri <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingTestimonial.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const inits = name.trim().split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+                      setEditingTestimonial({
+                        ...editingTestimonial,
+                        name,
+                        initials: editingTestimonial.initials ? editingTestimonial.initials : inits,
+                      });
+                    }}
+                    placeholder="Contoh: Muhammad Fatih Al-Azhari"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Inisial Avatar
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={editingTestimonial.initials}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, initials: e.target.value.toUpperCase() })}
+                    placeholder="MF"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Fakultas / Status
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTestimonial.role}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, role: e.target.value })}
+                    placeholder="Contoh: Fakultas Syariah Islamiyyah (FSI)"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Tingkat &amp; Lokasi
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTestimonial.university}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, university: e.target.value })}
+                    placeholder="Contoh: Tingkat 3 · Darrasa, Kairo"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Kategori Tag
+                  </label>
+                  <select
+                    value={editingTestimonial.tag}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, tag: e.target.value })}
+                    className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  >
+                    <option value="Masisir Kairo">Masisir Kairo</option>
+                    <option value="Alumni Kairo">Alumni Kairo</option>
+                    <option value="Bimbel Imtihan">Bimbel Imtihan</option>
+                    <option value="Calon Masisir">Calon Masisir</option>
+                    <option value="Santri Dars">Santri Dars</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Tahun / Angkatan
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTestimonial.year}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, year: e.target.value })}
+                    placeholder="Contoh: Masisir 2023 / Termin II 2024"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Program / Kelas Terkait
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTestimonial.course}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, course: e.target.value })}
+                    placeholder="Contoh: Kajian Fikih Matan Abi Syuja"
+                    className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Rating Penilaian (Bintang)
+                  </label>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {[1, 2, 3, 4, 5].map((starVal) => (
+                      <button
+                        key={starVal}
+                        type="button"
+                        onClick={() => setEditingTestimonial({ ...editingTestimonial, rating: starVal })}
+                        className="cursor-pointer p-0.5 hover:scale-110 transition"
+                      >
+                        <Star
+                          className={`h-5 w-5 ${
+                            starVal <= (editingTestimonial.rating || 5)
+                              ? 'fill-[#f59e0b] text-[#f59e0b]'
+                              : 'fill-transparent text-[#dce9df]'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="ml-2 text-xs font-bold text-[#112d22]">
+                      {editingTestimonial.rating || 5} Bintang
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#17382c] mb-1">
+                  Pilihan Warna Gradien Avatar
+                </label>
+                <div className="flex items-center gap-2 pt-1">
+                  {[
+                    { label: 'Emerald Teal', val: 'from-[#006d77] to-[#148369]' },
+                    { label: 'Deep Cyan', val: 'from-[#0a485c] to-[#157a99]' },
+                    { label: 'Sage Olive', val: 'from-[#2e4735] to-[#456950]' },
+                    { label: 'Forest Green', val: 'from-[#1b4332] to-[#2d6a4f]' },
+                    { label: 'Teal Mint', val: 'from-[#094d40] to-[#187563]' },
+                  ].map((c) => (
+                    <button
+                      key={c.val}
+                      type="button"
+                      onClick={() => setEditingTestimonial({ ...editingTestimonial, avatarColor: c.val })}
+                      className={`h-7 w-7 rounded-xl bg-gradient-to-tr ${c.val} transition cursor-pointer ${
+                        editingTestimonial.avatarColor === c.val ? 'ring-2 ring-offset-2 ring-[#006d77] scale-110' : 'opacity-80 hover:opacity-100'
+                      }`}
+                      title={c.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#17382c] mb-1">
+                  URL Foto Profil (Opsional)
+                </label>
+                <input
+                  type="url"
+                  value={editingTestimonial.avatar_url || ''}
+                  onChange={(e) => setEditingTestimonial({ ...editingTestimonial, avatar_url: e.target.value })}
+                  placeholder="https://... (Kosongkan jika ingin memakai inisial warna)"
+                  className="w-full rounded-xl border border-[#cbded0] px-3.5 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#17382c] mb-1">
+                  Isi Kutipan / Ulasan Testimoni <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={editingTestimonial.quote}
+                  onChange={(e) => setEditingTestimonial({ ...editingTestimonial, quote: e.target.value })}
+                  placeholder="Ceritakan pengalaman belajar, manfaat bagi imtihan di Kairo, pembedahan ibarat kitab, atau kemudahan materi..."
+                  className="w-full rounded-xl border border-[#cbded0] p-3 text-xs text-[#112d22] leading-relaxed focus:border-[#006d77] focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <label className="flex items-center gap-2 text-xs font-bold text-[#112d22] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editingTestimonial.is_active}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, is_active: e.target.checked })}
+                    className="h-4 w-4 rounded border-[#cbded0] text-[#006d77] focus:ring-[#006d77]"
+                  />
+                  <span>Tampilkan di Landing Page Website</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#6c8577]">Urutan:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingTestimonial.sort_order}
+                    onChange={(e) => setEditingTestimonial({ ...editingTestimonial, sort_order: Number(e.target.value) || 1 })}
+                    className="w-14 rounded-lg border border-[#cbded0] px-2 py-1 text-center text-xs font-bold text-[#112d22]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-[#edf4ef] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTestimonial(null)}
+                  className="rounded-full border border-[#cfe0d5] px-4 py-2 text-xs font-semibold text-[#556e61] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] disabled:opacity-60 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? 'Menyimpan...' : 'Simpan Testimoni'}</span>
                 </button>
               </div>
             </form>

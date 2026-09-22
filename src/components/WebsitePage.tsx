@@ -38,6 +38,7 @@ import { galleryPhotos, landingGalleryPhotos, GalleryPhoto, getCourseCoverImage 
 import { GalleryLightboxModal } from './GalleryLightboxModal';
 import { getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 import { MayarPaymentModal } from './MayarPaymentModal';
+import { loadTestimonials, getStoredTestimonials, TestimonialItem } from '../data/testimonialsData';
 
 type Faculty = 'Semua' | 'Syariah' | 'Ushuluddin' | 'Lughah Arabiyyah';
 type ProgramType = 'Dars' | 'Bimbel';
@@ -132,81 +133,6 @@ const faqs = [
   { question: 'Apakah ada bank soal atau rangkuman?', answer: 'Setiap program memiliki fasilitas yang berbeda. Detail video, PDF muqarrar, bank soal, dan latihan tercantum pada kartu program.' },
 ];
 
-const testimonials = [
-  {
-    name: 'Muhammad Fatih Al-Azhari',
-    initials: 'MF',
-    role: 'Fakultas Syariah Islamiyyah (FSI)',
-    university: 'Tingkat 3 · Darrasa, Kairo',
-    tag: 'Masisir Kairo',
-    course: 'Kajian Fikih Matan Abi Syuja',
-    year: 'Masisir 2022',
-    rating: 5,
-    avatarColor: 'from-[#006d77] to-[#148369]',
-    quote: 'Pembahasan muqarrar fikih per bab bikin saya jauh lebih gampang membedah ibarat kitab sebelum imtihan. Catatan faedah dan murojaah bersama mentor ngebantu banget pas belajar di Darrasa.',
-  },
-  {
-    name: 'Hilman Syauqil Haq',
-    initials: 'HS',
-    role: 'Fakultas Ushuluddin (Tafsir & Hadits)',
-    university: 'Tingkat 4 · Hay \'Asyir, Kairo',
-    tag: 'Masisir Kairo',
-    course: 'Kajian Aqidah Ithaf al-Murid',
-    year: 'Masisir 2021',
-    rating: 5,
-    avatarColor: 'from-[#0a485c] to-[#157a99]',
-    quote: 'Nggak lagi bingung mulai dari mana saat buka diktat muqarrar tebal. Alur syarah aqidah di Al Madraj runut dari penjelasan matan sampai takhrij dalil, sangat pas buat amunisi imtihan termin.',
-  },
-  {
-    name: 'Nida Khairunnisa, Lc.',
-    initials: 'NK',
-    role: 'Fak. Dirasat Islamiyyah Banat (FDIA)',
-    university: 'Alumni 2024 · Madinat Nashr, Kairo',
-    tag: 'Alumni Kairo',
-    course: 'Kajian Adab Mabahits Turats',
-    year: 'Alumni Masisir',
-    rating: 5,
-    avatarColor: 'from-[#2e4735] to-[#456950]',
-    quote: 'Ibarat sastra klasik dan kaidah balaghah yang sering muncul di lembar soal imtihan dibedah sangat tuntas. Ini platform dars digital pertama yang benar-benar memahami kebutuhan anak Masisir.',
-  },
-  {
-    name: 'Faris Naufal As-Suyuthi',
-    initials: 'FN',
-    role: 'Fakultas Lughah Arabiyyah (FLA)',
-    university: 'Tingkat 2 · Hay Tsamin, Kairo',
-    tag: 'Masisir Kairo',
-    course: 'Kelas Tajwid Al-Qawl As-Sadid',
-    year: 'Masisir 2023',
-    rating: 5,
-    avatarColor: 'from-[#006d77] to-[#15805e]',
-    quote: 'Talaqqi tajwidnya berasa seperti duduk langsung di halaqah masjid. Penjelasan makharijul huruf dan sanad matan Al-Qawl As-Sadid sangat sistematis, bisa disimak ulang kapan pun.',
-  },
-  {
-    name: 'Ahmad Syakir Zulfikar',
-    initials: 'AS',
-    role: 'Peserta Bimbel Rumah Sinai',
-    university: 'FSI Tingkat 2 · Darrasa, Kairo',
-    tag: 'Bimbel Imtihan',
-    course: 'Bimbel Imtihan Al-Azhar',
-    year: 'Termin II 2024',
-    rating: 5,
-    avatarColor: 'from-[#094d40] to-[#187563]',
-    quote: 'Pas minggu tenang imtihan, video rekaman materi dan rangkuman PDF di dashboard ini penyelamat banget. Nggak perlu lagi pusing nyari link rekaman tercecer di grup angkatan.',
-  },
-  {
-    name: 'Zulfa Mumtazah Al-Hafizhah',
-    initials: 'ZM',
-    role: 'Persiapan Masuk Al-Azhar (Maba)',
-    university: 'Belajar dari Jombang, Jawa Timur',
-    tag: 'Calon Masisir',
-    course: 'Dars Turats & Bahasa Arab Dasar',
-    year: 'Maba 2025',
-    rating: 5,
-    avatarColor: 'from-[#1b4332] to-[#2d6a4f]',
-    quote: 'Walaupun masih di Indonesia menunggu jadwal keberangkatan ke Kairo, saya sudah bisa adaptasi dengan muqarrar dan ritme belajar dars turats Al-Azhar. Akses webnya super cepat dan enteng di HP.',
-  },
-];
-
 const reveal = {
   initial: { opacity: 0, y: 16 },
   whileInView: { opacity: 1, y: 0 },
@@ -217,6 +143,9 @@ const reveal = {
 
 export const WebsitePage: React.FC = () => {
   const [programs, setPrograms] = useState<Program[]>(fallbackPrograms);
+  const [websiteTestimonials, setWebsiteTestimonials] = useState<TestimonialItem[]>(() =>
+    getStoredTestimonials().filter((t) => t.is_active)
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [programType, setProgramType] = useState<ProgramTypeFilter>('Semua');
   const [faculty, setFaculty] = useState<Faculty>('Semua');
@@ -225,6 +154,26 @@ export const WebsitePage: React.FC = () => {
   const [paymentCourse, setPaymentCourse] = useState<Program | null>(null);
   const [selectedGalleryPhoto, setSelectedGalleryPhoto] = useState<GalleryPhoto | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  useEffect(() => {
+    let active = true;
+    loadTestimonials().then((items) => {
+      if (active) {
+        setWebsiteTestimonials(items.filter((t) => t.is_active));
+      }
+    });
+
+    const handleTestimonialUpdate = () => {
+      if (active) {
+        setWebsiteTestimonials(getStoredTestimonials().filter((t) => t.is_active));
+      }
+    };
+    window.addEventListener('almadraj_testimonials_updated', handleTestimonialUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('almadraj_testimonials_updated', handleTestimonialUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -682,8 +631,8 @@ export const WebsitePage: React.FC = () => {
 
               {/* Testimonial Cards Grid */}
               <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {testimonials.map((item, index) => (
-                  <TestimonialCard key={item.name + index} item={item} index={index} />
+                {websiteTestimonials.map((item, index) => (
+                  <TestimonialCard key={item.id || item.name + index} item={item} index={index} />
                 ))}
               </div>
             </div>
@@ -945,7 +894,7 @@ const MobileLessonRow = ({ title, meta, state }: { title: string; meta: string; 
 
 const MobileMockupNav = ({ icon: Icon, label, active = false }: { icon: React.ElementType; label: string; active?: boolean }) => <span className={`flex flex-col items-center gap-1 text-[9px] font-semibold ${active ? 'text-[#006d77]' : 'text-[#91a49a]'}`}><Icon className="h-3.5 w-3.5" />{label}</span>;
 
-const TestimonialCard = ({ item, index }: { item: typeof testimonials[number]; index: number }) => (
+const TestimonialCard = ({ item, index }: { item: TestimonialItem; index: number }) => (
   <motion.article
     {...reveal}
     transition={{ ...reveal.transition, delay: index * 0.05 }}
@@ -954,15 +903,25 @@ const TestimonialCard = ({ item, index }: { item: typeof testimonials[number]; i
     <div>
       {/* Top Header: Avatar, Name & Role */}
       <div className="flex items-center gap-3">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr ${item.avatarColor} text-sm font-bold text-white shadow-xs`}>
-          {item.initials}
-        </div>
-        <div>
-          <h4 className="text-sm font-bold text-[#143428] sm:text-base">
+        {item.avatar_url ? (
+          <img
+            src={item.avatar_url}
+            alt={item.name}
+            className="h-11 w-11 shrink-0 rounded-xl object-cover shadow-xs border border-[#d8e7dc]"
+          />
+        ) : (
+          <div
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr ${item.avatarColor || 'from-[#006d77] to-[#148369]'} text-sm font-bold text-white shadow-xs`}
+          >
+            {item.initials || (item.name ? item.name.slice(0, 2).toUpperCase() : 'AL')}
+          </div>
+        )}
+        <div className="min-w-0">
+          <h4 className="text-sm font-bold text-[#143428] sm:text-base truncate">
             {item.name}
           </h4>
-          <p className="text-xs text-[#5c7768]">
-            {item.role} · {item.university}
+          <p className="text-xs text-[#5c7768] truncate">
+            {item.role} {item.university ? `· ${item.university}` : ''}
           </p>
         </div>
       </div>
@@ -971,13 +930,24 @@ const TestimonialCard = ({ item, index }: { item: typeof testimonials[number]; i
       <div className="mt-4 flex items-center justify-between border-y border-[#edf5f0] py-2.5">
         <div className="flex items-center gap-1">
           {[0, 1, 2, 3, 4].map((starIndex) => (
-            <Star key={starIndex} className="h-3.5 w-3.5 fill-[#f59e0b] text-[#f59e0b]" />
+            <Star
+              key={starIndex}
+              className={`h-3.5 w-3.5 ${
+                starIndex < Math.round(item.rating || 5)
+                  ? 'fill-[#f59e0b] text-[#f59e0b]'
+                  : 'fill-transparent text-[#dce9df]'
+              }`}
+            />
           ))}
-          <span className="ml-1 text-[11px] font-bold text-[#143428]">5.0</span>
+          <span className="ml-1 text-[11px] font-bold text-[#143428]">
+            {(Number(item.rating) || 5).toFixed(1)}
+          </span>
         </div>
-        <span className="text-[11px] font-medium text-[#7a9486]">
-          {item.year}
-        </span>
+        {item.year && (
+          <span className="text-[11px] font-medium text-[#7a9486]">
+            {item.year}
+          </span>
+        )}
       </div>
 
       {/* Quote */}
@@ -987,10 +957,12 @@ const TestimonialCard = ({ item, index }: { item: typeof testimonials[number]; i
     </div>
 
     {/* Course Footer */}
-    <div className="mt-6 flex items-center gap-2 border-t border-[#edf5f0] pt-3 text-xs text-[#1e6144]">
-      <BookOpen className="h-3.5 w-3.5 shrink-0 text-[#127a56]" />
-      <span className="truncate font-medium">{item.course}</span>
-    </div>
+    {item.course && (
+      <div className="mt-6 flex items-center gap-2 border-t border-[#edf5f0] pt-3 text-xs text-[#1e6144]">
+        <BookOpen className="h-3.5 w-3.5 shrink-0 text-[#127a56]" />
+        <span className="truncate font-medium">{item.course}</span>
+      </div>
+    )}
   </motion.article>
 );
 
