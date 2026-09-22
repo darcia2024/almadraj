@@ -32,10 +32,11 @@ import {
 } from 'lucide-react';
 import {
   BOOK_CATEGORIES,
-  BOOKS_DATA,
-  BOOKSTORE_CONTACT,
   BookCategory,
-  BookItem
+  BookItem,
+  getStoredBooks,
+  loadBooks,
+  getStoredBookstoreContact
 } from '../data/booksData';
 
 export const BookStorePage: React.FC = () => {
@@ -45,9 +46,35 @@ export const BookStorePage: React.FC = () => {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [copiedAccount, setCopiedAccount] = useState<string | null>(null);
 
+  const [booksList, setBooksList] = useState<BookItem[]>(() =>
+    getStoredBooks().filter((b) => b.is_published !== false)
+  );
+  const [storeContact, setStoreContact] = useState(() => getStoredBookstoreContact());
+
+  React.useEffect(() => {
+    let isMounted = true;
+    loadBooks().then((items) => {
+      if (isMounted) {
+        setBooksList(items.filter((b) => b.is_published !== false));
+      }
+    });
+
+    const handleUpdate = () => {
+      if (isMounted) {
+        setBooksList(getStoredBooks().filter((b) => b.is_published !== false));
+        setStoreContact(getStoredBookstoreContact());
+      }
+    };
+    window.addEventListener('almadraj_books_updated', handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('almadraj_books_updated', handleUpdate);
+    };
+  }, []);
+
   // Filter books based on category and search query
   const filteredBooks = useMemo(() => {
-    return BOOKS_DATA.filter((book) => {
+    return booksList.filter((book) => {
       const matchCategory = selectedCategory === 'Semua' || book.category === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
       const matchQuery =
@@ -61,7 +88,7 @@ export const BookStorePage: React.FC = () => {
         book.category.toLowerCase().includes(q);
       return matchCategory && matchQuery;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [booksList, selectedCategory, searchQuery]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -90,7 +117,7 @@ export const BookStorePage: React.FC = () => {
   };
 
   const getWhatsAppOrderUrl = (book: BookItem) => {
-    const waNumber = book.contactPerson?.whatsapp || BOOKSTORE_CONTACT.whatsappNumber;
+    const waNumber = book.contactPerson?.whatsapp || storeContact.whatsappNumber;
     const text = book.whatsappMessage || 
       `Assalamu'alaikum Admin Al Madraj, saya tertarik memesan Kitab *${book.title}* (${formatPrice(book.price)}). Apakah stok masih tersedia?`;
     return `https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`;
@@ -140,7 +167,7 @@ export const BookStorePage: React.FC = () => {
               <span>Katalog Dars</span>
             </a>
             <a
-              href={`https://wa.me/${BOOKSTORE_CONTACT.whatsappNumber}?text=${encodeURIComponent("Assalamu'alaikum Admin Al Madraj, saya ingin konsultasi pemesanan kitab turats.")}`}
+              href={`https://wa.me/${storeContact.whatsappNumber}?text=${encodeURIComponent("Assalamu'alaikum Admin Al Madraj, saya ingin konsultasi pemesanan kitab turats.")}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#00565e] active:scale-95"
@@ -300,7 +327,7 @@ export const BookStorePage: React.FC = () => {
                 Tampilkan Semua Buku
               </button>
               <a
-                href={`https://wa.me/${BOOKSTORE_CONTACT.whatsappNumber}?text=${encodeURIComponent(`Assalamu'alaikum Admin, saya mencari buku: "${searchQuery}". Apakah bisa dipesankan?`)}`}
+                href={`https://wa.me/${storeContact.whatsappNumber}?text=${encodeURIComponent(`Assalamu'alaikum Admin, saya mencari buku: "${searchQuery}". Apakah bisa dipesankan?`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-full border border-[#83c5be] bg-white px-4 py-2 text-xs font-semibold text-[#006d77] hover:bg-[#83c5be]/10"
@@ -779,7 +806,7 @@ export const BookStorePage: React.FC = () => {
             <Truck className="h-5 w-5 shrink-0 text-[#006d77] mt-0.5" />
             <div>
               <strong className="font-bold">Info Ekspedisi & Titipan Kairo:</strong>
-              <p className="mt-0.5">{BOOKSTORE_CONTACT.deliveryNotes}</p>
+              <p className="mt-0.5">{storeContact.deliveryNotes}</p>
             </div>
           </div>
         </div>

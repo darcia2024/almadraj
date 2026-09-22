@@ -1,7 +1,13 @@
+import { supabase, supabaseConfigured } from '../lib/supabase';
+
 export type BookCategory = 
   | 'Semua' 
   | 'Aqidah' 
-  | 'Tazkiyah';
+  | 'Tazkiyah'
+  | 'Fikih'
+  | 'Hadits'
+  | 'Lughah'
+  | (string & {});
 
 export interface ContactPerson {
   name: string;
@@ -23,7 +29,7 @@ export interface BookItem {
   arabicTitle: string;
   author: string;
   foreword?: string;
-  category: Exclude<BookCategory, 'Semua'>;
+  category: string;
   publisher: string;
   coverImage?: string;
   gradientCover: string;
@@ -35,19 +41,24 @@ export interface BookItem {
   bankAccount?: BankAccount;
   orderSteps?: string[];
   pages: number;
-  coverType: 'Hard Cover' | 'Soft Cover' | 'Mujallad Lux';
-  paperType: 'Kertas Shamois (Kuning)' | 'Kertas HVS Putih' | 'Kertas Bookpaper';
+  coverType: 'Hard Cover' | 'Soft Cover' | 'Mujallad Lux' | string;
+  paperType: 'Kertas Shamois (Kuning)' | 'Kertas HVS Putih' | 'Kertas Bookpaper' | string;
   weight: string;
   description: string;
   keyFeatures: string[];
   purchaseUrl?: string;
   whatsappMessage?: string;
+  is_published?: boolean;
+  sort_order?: number;
 }
 
 export const BOOK_CATEGORIES: BookCategory[] = [
   'Semua',
   'Aqidah',
-  'Tazkiyah'
+  'Tazkiyah',
+  'Fikih',
+  'Hadits',
+  'Lughah'
 ];
 
 export const BOOKS_DATA: BookItem[] = [
@@ -93,7 +104,9 @@ export const BOOKS_DATA: BookItem[] = [
       'Dilengkapi bagan logika sifat 20 dan dalil-dalil Asy\'ariyyah mu\'tamad',
       'Karya alumni Al-Azhar Kairo dengan bahasa ilmiah yang santun dan jernih'
     ],
-    whatsappMessage: "Assalamu'alaikum Ust. M. Zulfikar Sulkhi, saya ingin memesan Pre-Order Buku 'Gerbang Akidah Ahlusunnah' (Rp100.000). Mohon panduan pemesanan dan link form."
+    whatsappMessage: "Assalamu'alaikum Ust. M. Zulfikar Sulkhi, saya ingin memesan Pre-Order Buku 'Gerbang Akidah Ahlusunnah' (Rp100.000). Mohon panduan pemesanan dan link form.",
+    is_published: true,
+    sort_order: 1
   },
   {
     id: 'book-almadraj-02',
@@ -132,7 +145,9 @@ export const BOOKS_DATA: BookItem[] = [
       'Dilengkapi ta\'liq dan takhrij teks dari kitab-kitab induk turats',
       'Penerbitan resmi di bawah naungan Al-Madraj Publishing'
     ],
-    whatsappMessage: "Assalamu'alaikum Ust. Zulfikar / Admin Al Madraj, saya ingin ikut Pre-Order Buku 'Syekh Ibnu Taimiyah: Antara Pujian dan Kritikan' karya Ulul Albab Fatahillah (Rp130.000). Mohon info pemesanannya."
+    whatsappMessage: "Assalamu'alaikum Ust. Zulfikar / Admin Al Madraj, saya ingin ikut Pre-Order Buku 'Syekh Ibnu Taimiyah: Antara Pujian dan Kritikan' karya Ulul Albab Fatahillah (Rp130.000). Mohon info pemesanannya.",
+    is_published: true,
+    sort_order: 2
   },
   {
     id: 'book-almadraj-03',
@@ -172,7 +187,9 @@ export const BOOKS_DATA: BookItem[] = [
       'Solusi praktis berbasis fikih mazhab Syafi\'i dan tazkiyatun nufus',
       'Harga promo spesial pre-order Rp75.000 (hemat Rp15.000)'
     ],
-    whatsappMessage: "Assalamu'alaikum Ust. Watra Sarajeva, saya ingin memesan Pre-Order Buku 'Beragama Dengan Tenang' (Harga PO Rp75.000). Mohon link Google Form untuk wilayah saya."
+    whatsappMessage: "Assalamu'alaikum Ust. Watra Sarajeva, saya ingin memesan Pre-Order Buku 'Beragama Dengan Tenang' (Harga PO Rp75.000). Mohon link Google Form untuk wilayah saya.",
+    is_published: true,
+    sort_order: 3
   }
 ];
 
@@ -187,4 +204,196 @@ export const BOOKSTORE_CONTACT = {
   deliveryNotes: 'Melayani pengiriman resmi di wilayah Kairo (Mesir) khusus Masisir & pengiriman ke seluruh pelosok Indonesia via ekspedisi terpercaya.'
 };
 
+const BOOKS_STORAGE_KEY = 'almadraj_books_v1';
+const CONTACT_STORAGE_KEY = 'almadraj_bookstore_contact_v1';
 
+export const getStoredBooks = (): BookItem[] => {
+  if (typeof window === 'undefined') return BOOKS_DATA;
+  try {
+    const raw = window.localStorage.getItem(BOOKS_STORAGE_KEY);
+    if (!raw) {
+      window.localStorage.setItem(BOOKS_STORAGE_KEY, JSON.stringify(BOOKS_DATA));
+      return BOOKS_DATA;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : BOOKS_DATA;
+  } catch {
+    return BOOKS_DATA;
+  }
+};
+
+export const setStoredBooks = (items: BookItem[]): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(BOOKS_STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event('almadraj_books_updated'));
+  } catch (err) {
+    console.error('Failed to write books to local storage', err);
+  }
+};
+
+export const getStoredBookstoreContact = (): typeof BOOKSTORE_CONTACT => {
+  if (typeof window === 'undefined') return BOOKSTORE_CONTACT;
+  try {
+    const raw = window.localStorage.getItem(CONTACT_STORAGE_KEY);
+    if (!raw) return BOOKSTORE_CONTACT;
+    return { ...BOOKSTORE_CONTACT, ...JSON.parse(raw) };
+  } catch {
+    return BOOKSTORE_CONTACT;
+  }
+};
+
+export const setStoredBookstoreContact = (contact: typeof BOOKSTORE_CONTACT): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(contact));
+    window.dispatchEvent(new Event('almadraj_books_updated'));
+  } catch (err) {
+    console.error('Failed to write bookstore contact to local storage', err);
+  }
+};
+
+export const checkBooksTableStatus = async (): Promise<'checking' | 'synced' | 'table_missing' | 'offline'> => {
+  if (!supabaseConfigured || !supabase) return 'offline';
+  try {
+    const { error } = await supabase.from('books').select('id').limit(1);
+    if (error) return 'table_missing';
+    return 'synced';
+  } catch {
+    return 'table_missing';
+  }
+};
+
+export const loadBooks = async (): Promise<BookItem[]> => {
+  if (supabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('books')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const mapped: BookItem[] = data.map((d: any) => ({
+          id: d.id,
+          slug: d.slug,
+          title: d.title,
+          subtitle: d.subtitle || '',
+          arabicTitle: d.arabic_title || '',
+          author: d.author,
+          foreword: d.foreword || '',
+          category: d.category || 'Aqidah',
+          publisher: d.publisher || 'Al-Madraj Publishing',
+          coverImage: d.cover_image || '',
+          gradientCover: d.gradient_cover || 'from-[#0b2b30] via-[#006d77] to-[#83c5be]',
+          price: Number(d.price) || 0,
+          originalPrice: d.original_price ? Number(d.original_price) : undefined,
+          stockStatus: d.stock_status || 'ready',
+          targetRegion: d.target_region || '',
+          contactPerson: d.contact_person && d.contact_person.name ? d.contact_person : undefined,
+          bankAccount: d.bank_account && d.bank_account.bank ? d.bank_account : undefined,
+          orderSteps: Array.isArray(d.order_steps) ? d.order_steps : undefined,
+          pages: Number(d.pages) || 0,
+          coverType: d.cover_type || 'Soft Cover',
+          paperType: d.paper_type || 'Kertas Bookpaper',
+          weight: d.weight || '',
+          description: d.description || '',
+          keyFeatures: Array.isArray(d.key_features) ? d.key_features : [],
+          purchaseUrl: d.purchase_url || '',
+          whatsappMessage: d.whatsapp_message || '',
+          is_published: d.is_published ?? true,
+          sort_order: Number(d.sort_order) || 0,
+        }));
+        setStoredBooks(mapped);
+        return mapped;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return getStoredBooks();
+};
+
+export const saveBook = async (item: BookItem): Promise<{ item: BookItem; syncedWithDb: boolean; error?: string }> => {
+  const current = getStoredBooks();
+  const index = current.findIndex((b) => b.id === item.id);
+  let updatedList: BookItem[];
+
+  if (index >= 0) {
+    updatedList = [...current];
+    updatedList[index] = item;
+  } else {
+    updatedList = [item, ...current];
+  }
+
+  setStoredBooks(updatedList);
+
+  let syncedWithDb = false;
+  let dbError: string | undefined;
+
+  if (supabaseConfigured && supabase) {
+    try {
+      const payload: any = {
+        id: item.id,
+        slug: item.slug,
+        title: item.title,
+        subtitle: item.subtitle || '',
+        arabic_title: item.arabicTitle || '',
+        author: item.author,
+        foreword: item.foreword || '',
+        category: item.category,
+        publisher: item.publisher,
+        cover_image: item.coverImage || '',
+        gradient_cover: item.gradientCover,
+        price: item.price,
+        original_price: item.originalPrice || null,
+        stock_status: item.stockStatus,
+        target_region: item.targetRegion || '',
+        contact_person: item.contactPerson || {},
+        bank_account: item.bankAccount || {},
+        order_steps: item.orderSteps || [],
+        pages: item.pages || 0,
+        cover_type: item.coverType || 'Soft Cover',
+        paper_type: item.paperType || 'Kertas Bookpaper',
+        weight: item.weight || '',
+        description: item.description || '',
+        key_features: item.keyFeatures || [],
+        purchase_url: item.purchaseUrl || '',
+        whatsapp_message: item.whatsappMessage || '',
+        is_published: item.is_published ?? true,
+        sort_order: item.sort_order || 0,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('books')
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (!error && data) {
+        syncedWithDb = true;
+      } else if (error) {
+        dbError = error.message;
+      }
+    } catch (err: any) {
+      dbError = err?.message || 'Database error';
+    }
+  }
+
+  return { item, syncedWithDb, error: dbError };
+};
+
+export const deleteBook = async (id: string): Promise<void> => {
+  const current = getStoredBooks();
+  const filtered = current.filter((b) => b.id !== id);
+  setStoredBooks(filtered);
+
+  if (supabaseConfigured && supabase) {
+    try {
+      await supabase.from('books').delete().eq('id', id);
+    } catch {
+      // Ignored
+    }
+  }
+};

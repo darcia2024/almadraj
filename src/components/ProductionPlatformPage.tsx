@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, Bell, Bookmark, BookOpen, CalendarDays, Camera, Check,
-  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, Copy, CreditCard, Download, Eye, EyeOff, FileCheck, FileText,
-  Flame, GraduationCap, Headphones, ImageIcon, LayoutDashboard, Lock, LockKeyhole, LogOut, Maximize, Menu,
-  MessageCircle, Minimize, MoreHorizontal, Music, Pause, Pencil, Play, Plus, Printer, Quote, RefreshCw, RotateCcw,
-  RotateCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Target, Trash2,
-  UserRound, UsersRound, Video, Volume2, VolumeX, X
+  ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, Bell, Bookmark, BookMarked, BookOpen, CalendarDays, Camera, Check,
+  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, Copy, CreditCard, Download, ExternalLink, Eye, EyeOff, FileCheck, FileText,
+  Flame, GraduationCap, Headphones, ImageIcon, LayoutDashboard, Library, Lock, LockKeyhole, LogOut, Maximize, Menu,
+  MessageCircle, Minimize, MoreHorizontal, Music, Package, Pause, Pencil, Play, Plus, Printer, Quote, RefreshCw, RotateCcw,
+  RotateCw, Save, Search, Settings2, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Star, Tag, Target, Trash2,
+  Truck, UserRound, UsersRound, Video, Volume2, VolumeX, X
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
@@ -22,6 +22,21 @@ import {
   checkTestimonialsTableStatus,
   DatabaseSyncStatus
 } from '../data/testimonialsData';
+import {
+  BookItem,
+  BookCategory,
+  BOOK_CATEGORIES,
+  BOOKS_DATA,
+  BOOKSTORE_CONTACT,
+  loadBooks,
+  saveBook,
+  deleteBook,
+  getStoredBooks,
+  setStoredBooks,
+  getStoredBookstoreContact,
+  setStoredBookstoreContact,
+  checkBooksTableStatus
+} from '../data/booksData';
 
 type ProgramType = 'Dars' | 'Bimbel';
 type Course = {
@@ -4701,7 +4716,7 @@ type ProductionAdminOrder = { id: string; amount: number; status: string; provid
 type ProductionAdminProgress = LessonProgress & { user_id: string };
 
 const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: string) => void; user?: { id: string; email?: string } | null; profile?: Profile | null }) => {
-  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions' | 'gateway' | 'testimonials';
+  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions' | 'gateway' | 'testimonials' | 'books';
   type CourseModalTab = 'identity' | 'media' | 'coordinator';
 
   type CourseDraft = {
@@ -4768,6 +4783,19 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [testimonialStatusFilter, setTestimonialStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
   const [copiedTestiSql, setCopiedTestiSql] = useState(false);
   const [dbSyncStatus, setDbSyncStatus] = useState<DatabaseSyncStatus>('checking');
+
+  // Pustaka / Bookstore States
+  const [booksList, setBooksList] = useState<BookItem[]>(() => getStoredBooks());
+  const [storeContact, setStoreContact] = useState(() => getStoredBookstoreContact());
+  const [editingBook, setEditingBook] = useState<BookItem | null>(null);
+  const [isCreatingBook, setIsCreatingBook] = useState(false);
+  const [isEditingStoreContact, setIsEditingStoreContact] = useState(false);
+  const [storeContactDraft, setStoreContactDraft] = useState(() => getStoredBookstoreContact());
+  const [bookSearch, setBookSearch] = useState('');
+  const [bookCategoryFilter, setBookCategoryFilter] = useState<string>('Semua');
+  const [bookStockFilter, setBookStockFilter] = useState<'all' | 'ready' | 'preorder' | 'out_of_stock'>('all');
+  const [copiedBooksSql, setCopiedBooksSql] = useState(false);
+  const [dbBooksStatus, setDbBooksStatus] = useState<DatabaseSyncStatus>('checking');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -4869,6 +4897,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       setProgressRows((progressResult.data || []) as ProductionAdminProgress[]);
       loadTestimonials().then((items) => { if (items && items.length) setTestimonialsList(items); }).catch(() => null);
       checkTestimonialsTableStatus().then(setDbSyncStatus);
+      loadBooks().then((items) => { if (items && items.length) setBooksList(items); }).catch(() => null);
+      checkBooksTableStatus().then(setDbBooksStatus);
     } catch (loadError) {
       onError(loadError instanceof Error ? loadError.message : 'Data operasional gagal dimuat.');
     } finally {
@@ -4908,6 +4938,14 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     const handleTestiUpdate = () => setTestimonialsList(getStoredTestimonials());
     window.addEventListener('almadraj_testimonials_updated', handleTestiUpdate);
     return () => window.removeEventListener('almadraj_testimonials_updated', handleTestiUpdate);
+  }, []);
+  useEffect(() => {
+    const handleBooksUpdate = () => {
+      setBooksList(getStoredBooks());
+      setStoreContact(getStoredBookstoreContact());
+    };
+    window.addEventListener('almadraj_books_updated', handleBooksUpdate);
+    return () => window.removeEventListener('almadraj_books_updated', handleBooksUpdate);
   }, []);
 
   const recordAudit = async (action: string, entityType: string, entityId?: string, metadata: Record<string, unknown> = {}) => {
@@ -4989,6 +5027,133 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     if (!window.confirm('Kembalikan daftar testimoni ke 6 testimoni bawaan awal Masisir Kairo?')) return;
     setStoredTestimonials(DEFAULT_TESTIMONIALS);
     setTestimonialsList(DEFAULT_TESTIMONIALS);
+  };
+
+  const handleSaveBookItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBook) return;
+    if (!editingBook.title.trim()) {
+      onError('Judul kitab / buku wajib diisi.');
+      return;
+    }
+    if (!editingBook.author.trim()) {
+      onError('Nama penulis / muallif kitab wajib diisi.');
+      return;
+    }
+    if (editingBook.price < 0 || isNaN(editingBook.price)) {
+      onError('Harga kitab tidak boleh negatif atau kosong.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const generatedSlug = (!editingBook.id || isCreatingBook || !editingBook.slug)
+        ? editingBook.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : editingBook.slug;
+
+      const payload: BookItem = {
+        ...editingBook,
+        slug: generatedSlug || 'kitab-' + Date.now(),
+        title: editingBook.title.trim(),
+        subtitle: (editingBook.subtitle || '').trim(),
+        arabicTitle: (editingBook.arabicTitle || '').trim(),
+        author: editingBook.author.trim(),
+        foreword: (editingBook.foreword || '').trim(),
+        category: (editingBook.category || 'Aqidah').trim(),
+        publisher: (editingBook.publisher || 'Al-Madraj Publishing').trim(),
+        coverImage: (editingBook.coverImage || '').trim(),
+        gradientCover: editingBook.gradientCover || 'from-[#0b2b30] via-[#006d77] to-[#83c5be]',
+        price: Math.max(0, Number(editingBook.price) || 0),
+        originalPrice: editingBook.originalPrice ? Math.max(0, Number(editingBook.originalPrice)) : undefined,
+        stockStatus: editingBook.stockStatus || 'ready',
+        targetRegion: (editingBook.targetRegion || '').trim(),
+        contactPerson: editingBook.contactPerson?.name ? {
+          name: editingBook.contactPerson.name.trim(),
+          whatsapp: editingBook.contactPerson.whatsapp.trim(),
+          whatsappDisplay: editingBook.contactPerson.whatsappDisplay.trim() || editingBook.contactPerson.whatsapp.trim(),
+        } : undefined,
+        bankAccount: editingBook.bankAccount?.bank ? {
+          bank: editingBook.bankAccount.bank.trim(),
+          accountNumber: editingBook.bankAccount.accountNumber.trim(),
+          accountName: editingBook.bankAccount.accountName.trim(),
+        } : undefined,
+        orderSteps: Array.isArray(editingBook.orderSteps) ? editingBook.orderSteps.filter(Boolean) : undefined,
+        pages: Math.max(0, Number(editingBook.pages) || 0),
+        coverType: editingBook.coverType || 'Soft Cover',
+        paperType: editingBook.paperType || 'Kertas Bookpaper',
+        weight: (editingBook.weight || '').trim(),
+        description: editingBook.description.trim(),
+        keyFeatures: Array.isArray(editingBook.keyFeatures) ? editingBook.keyFeatures.filter(Boolean) : [],
+        purchaseUrl: (editingBook.purchaseUrl || '').trim(),
+        whatsappMessage: (editingBook.whatsappMessage || '').trim(),
+        is_published: editingBook.is_published ?? true,
+        sort_order: Number(editingBook.sort_order) || booksList.length + 1,
+      };
+
+      const { syncedWithDb } = await saveBook(payload);
+      setBooksList(getStoredBooks());
+      setEditingBook(null);
+      setIsCreatingBook(false);
+      checkBooksTableStatus().then(setDbBooksStatus);
+      await recordAudit('book.saved', 'book', payload.id, { title: payload.title, syncedWithDb });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal menyimpan data kitab');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleBookPublish = async (book: BookItem) => {
+    try {
+      const updated = { ...book, is_published: !(book.is_published ?? true) };
+      await saveBook(updated);
+      setBooksList(getStoredBooks());
+      await recordAudit('book.publish_toggled', 'book', book.id, { title: book.title, is_published: updated.is_published });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal memperbarui status publikasi kitab');
+    }
+  };
+
+  const handleToggleBookStock = async (book: BookItem, nextStatus: 'ready' | 'preorder' | 'out_of_stock') => {
+    try {
+      const updated: BookItem = { ...book, stockStatus: nextStatus };
+      await saveBook(updated);
+      setBooksList(getStoredBooks());
+      await recordAudit('book.stock_updated', 'book', book.id, { title: book.title, stockStatus: nextStatus });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal mengubah status stok kitab');
+    }
+  };
+
+  const handleDeleteBookItem = async (id: string, title: string) => {
+    if (!window.confirm(`Hapus buku "${title}" dari katalog Pustaka? Tindakan ini akan menghapus buku dari tampilan toko.`)) return;
+    try {
+      await deleteBook(id);
+      setBooksList(getStoredBooks());
+      await recordAudit('book.deleted', 'book', id, { title });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal menghapus buku');
+    }
+  };
+
+  const handleResetBooksList = () => {
+    if (!window.confirm('Kembalikan seluruh katalog buku ke 3 kitab terbitan bawaan Al-Madraj?')) return;
+    setStoredBooks(BOOKS_DATA);
+    setBooksList(BOOKS_DATA);
+  };
+
+  const handleSaveStoreContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      setStoredBookstoreContact(storeContactDraft);
+      setStoreContact(storeContactDraft);
+      setIsEditingStoreContact(false);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Gagal menyimpan kontak pustaka');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startCourse = (course?: ProductionAdminCourse, initialModalTab: CourseModalTab = 'identity') => {
@@ -5298,6 +5463,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           { id: 'transactions' as const, label: 'Transaksi & Keuangan', icon: CreditCard, count: orders.length },
           { id: 'gateway' as const, label: 'Integrasi Mayar', icon: ShieldCheck, count: 'Mayar.id' },
           { id: 'testimonials' as const, label: 'Kelola Testimoni', icon: Quote, count: testimonialsList.length },
+          { id: 'books' as const, label: 'Kelola Pustaka', icon: ShoppingBag, count: booksList.length },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = tab === item.id;
@@ -6822,6 +6988,558 @@ create policy testimonials_admin_manage on public.testimonials for all to authen
               </div>
             </div>
           )}
+
+          {tab === 'books' && (
+            <div className="space-y-6">
+              {/* Header with Stats & Actions */}
+              <div className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                        <ShoppingBag className="h-4 w-4" />
+                      </span>
+                      <h2 className="text-lg sm:text-xl font-bold text-[#112d22]">
+                        Katalog Pustaka &amp; Toko Buku Al Madraj
+                      </h2>
+                    </div>
+                    <p className="text-xs text-[#6c8577] mt-1 max-w-2xl leading-relaxed">
+                      Kelola terbitan kitab, buku terjemahan, harga (IDR), status stok (Pre-Order / Ready Stock / Habis), rincian fisik, serta kontak pemesanan langsung untuk santri di Kairo &amp; Nusantara.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStoreContactDraft({ ...storeContact });
+                        setIsEditingStoreContact(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#dce9df] bg-white px-3.5 py-2 text-xs font-bold text-[#5c7768] hover:bg-[#f3f7f4] transition cursor-pointer"
+                      title="Atur WhatsApp, link Shopee/Tokopedia, dan pengiriman"
+                    >
+                      <Truck className="h-3.5 w-3.5 text-[#006d77]" />
+                      <span>Kontak &amp; Pengiriman</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetBooksList}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#dce9df] bg-white px-3.5 py-2 text-xs font-bold text-[#5c7768] hover:bg-[#f3f7f4] transition cursor-pointer"
+                      title="Kembalikan ke data bawaan"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Reset Bawaan</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBook({
+                          id: 'book-' + Date.now(),
+                          slug: '',
+                          title: '',
+                          subtitle: '',
+                          arabicTitle: '',
+                          author: '',
+                          foreword: '',
+                          category: 'Aqidah',
+                          publisher: 'Al-Madraj Publishing',
+                          coverImage: '',
+                          gradientCover: 'from-[#0b2b30] via-[#006d77] to-[#83c5be]',
+                          price: 75000,
+                          originalPrice: 90000,
+                          stockStatus: 'ready',
+                          targetRegion: 'Khusus Mahasiswa Al-Azhar di Mesir & Pengiriman ke Indonesia',
+                          contactPerson: {
+                            name: 'Ust. M. Zulfikar Sulkhi A.',
+                            whatsapp: '6282310462582',
+                            whatsappDisplay: '+62 823-1046-2582',
+                          },
+                          bankAccount: {
+                            bank: 'BSI (Bank Syariah Indonesia)',
+                            accountNumber: '7259123456',
+                            accountName: 'Al-Madraj Official',
+                          },
+                          orderSteps: [
+                            'Pilih judul kitab yang diinginkan dan klik tombol pesan.',
+                            'Konfirmasi pesanan dan alamat via WhatsApp / Google Form.',
+                            'Lakukan pembayaran via transfer atau cash saat serah terima di Kairo.',
+                            'Kitab dikirimkan sesuai jadwal pengiriman atau COD wilayah Darrasa/Nasr City.',
+                          ],
+                          pages: 140,
+                          coverType: 'Soft Cover',
+                          paperType: 'Kertas Bookpaper',
+                          weight: '250 gram',
+                          description: '',
+                          keyFeatures: [
+                            'Teks arab berharakat jelas dan muhaqqaq',
+                            'Dilengkapi terjemah lugas & catatan kaki penjelas',
+                            'Layout lapang nyaman untuk mutholaah harian',
+                          ],
+                          purchaseUrl: '',
+                          whatsappMessage: '',
+                          is_published: true,
+                          sort_order: booksList.length + 1,
+                        });
+                        setIsCreatingBook(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#005259] transition cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Tambah Kitab Baru</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Supabase Table Sync Status Banner */}
+                <div className="mt-4 pt-4 border-t border-[#edf4ef] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/60 rounded-xl p-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                        dbBooksStatus === 'synced'
+                          ? 'bg-emerald-500 ring-4 ring-emerald-100'
+                          : dbBooksStatus === 'checking'
+                          ? 'bg-amber-400 ring-4 ring-amber-100 animate-pulse'
+                          : 'bg-amber-500 ring-4 ring-amber-100'
+                      }`}
+                    />
+                    <span className="font-semibold text-[#112d22]">
+                      {dbBooksStatus === 'synced'
+                        ? 'Tersinkronisasi dengan Database Supabase (Tabel public.books Aktif)'
+                        : dbBooksStatus === 'checking'
+                        ? 'Memeriksa status tabel database Supabase...'
+                        : 'Penyimpanan Lokal Aktif (Data Tersimpan & Langsung Tayang di /buku)'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sql = `-- Migration: public.books
+create table if not exists public.books (
+  id text primary key,
+  slug text not null unique,
+  title text not null,
+  subtitle text default '',
+  arabic_title text default '',
+  author text not null,
+  foreword text default '',
+  category text not null default 'Aqidah',
+  publisher text not null default 'Al-Madraj Publishing',
+  cover_image text default '',
+  gradient_cover text default 'from-[#0b2b30] via-[#006d77] to-[#83c5be]',
+  price numeric not null default 0,
+  original_price numeric,
+  stock_status text not null default 'ready',
+  target_region text default '',
+  contact_person jsonb default '{}'::jsonb,
+  bank_account jsonb default '{}'::jsonb,
+  order_steps text[] default '{}'::text[],
+  pages integer default 0,
+  cover_type text default 'Soft Cover',
+  paper_type text default 'Kertas Bookpaper',
+  weight text default '',
+  description text not null default '',
+  key_features text[] default '{}'::text[],
+  purchase_url text default '',
+  whatsapp_message text default '',
+  is_published boolean default true,
+  sort_order integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.books enable row level security;
+drop policy if exists books_public_read on public.books;
+create policy books_public_read on public.books for select using (true);
+drop policy if exists books_admin_manage on public.books;
+create policy books_admin_manage on public.books for all to authenticated using (public.is_lms_admin()) with check (public.is_lms_admin());`;
+                      navigator.clipboard.writeText(sql).then(() => {
+                        setCopiedBooksSql(true);
+                        setTimeout(() => setCopiedBooksSql(false), 2500);
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-white px-3.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-50 transition cursor-pointer self-start sm:self-auto shrink-0"
+                  >
+                    {copiedBooksSql ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedBooksSql ? 'SQL Tersalin!' : 'Salin Skrip SQL Supabase'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-4">
+                  <p className="text-[11px] font-semibold text-[#6c8577]">Total Judul Kitab</p>
+                  <p className="text-xl font-bold text-[#112d22] mt-0.5">{booksList.length}</p>
+                  <p className="text-[10px] text-[#006d77] mt-1 font-semibold">Tersimpan di katalog pustaka</p>
+                </div>
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-4">
+                  <p className="text-[11px] font-semibold text-[#6c8577]">Ready Stock</p>
+                  <p className="text-xl font-bold text-emerald-700 mt-0.5">
+                    {booksList.filter((b) => b.stockStatus === 'ready').length}
+                  </p>
+                  <p className="text-[10px] text-[#6c8577] mt-1">Siap kirim segera</p>
+                </div>
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-4">
+                  <p className="text-[11px] font-semibold text-[#6c8577]">Pre-Order Aktif</p>
+                  <p className="text-xl font-bold text-amber-600 mt-0.5">
+                    {booksList.filter((b) => b.stockStatus === 'preorder').length}
+                  </p>
+                  <p className="text-[10px] text-[#6c8577] mt-1">Membuka kuota pemesanan</p>
+                </div>
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-4">
+                  <p className="text-[11px] font-semibold text-[#6c8577]">Tayang di Toko</p>
+                  <p className="text-xl font-bold text-[#006d77] mt-0.5">
+                    {booksList.filter((b) => b.is_published !== false).length}
+                  </p>
+                  <p className="text-[10px] text-[#6c8577] mt-1">Tampil di halaman /buku</p>
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="rounded-2xl border border-[#dce9df] bg-white p-4 space-y-3">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71877b]" />
+                    <input
+                      type="text"
+                      value={bookSearch}
+                      onChange={(e) => setBookSearch(e.target.value)}
+                      placeholder="Cari judul kitab, nama muallif, judul arab, atau penerbit..."
+                      className="w-full rounded-xl border border-[#cbded0] bg-[#f9fbfa] py-2 pl-9 pr-3 text-xs outline-hidden focus:border-[#006d77] focus:bg-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+                    <span className="text-xs text-[#71877b] shrink-0 font-medium">Kategori:</span>
+                    {BOOK_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setBookCategoryFilter(cat)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                          bookCategoryFilter === cat
+                            ? 'bg-[#006d77] text-white shadow-xs'
+                            : 'bg-[#f3f7f4] text-[#5c7768] hover:bg-[#e4ece6]'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-[#edf4ef] pt-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#71877b] font-medium">Status Stok:</span>
+                    {[
+                      { id: 'all' as const, label: 'Semua' },
+                      { id: 'ready' as const, label: 'Ready Stock' },
+                      { id: 'preorder' as const, label: 'Pre-Order' },
+                      { id: 'out_of_stock' as const, label: 'Stok Habis' },
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setBookStockFilter(st.id)}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                          bookStockFilter === st.id
+                            ? 'bg-[#112d22] text-white'
+                            : 'bg-transparent text-[#60786b] hover:bg-[#edf4ef]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[#71877b]">
+                    Menampilkan{' '}
+                    <strong className="text-[#112d22]">
+                      {
+                        booksList.filter((b) => {
+                          const matchSearch =
+                            !bookSearch.trim() ||
+                            b.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
+                            (b.subtitle && b.subtitle.toLowerCase().includes(bookSearch.toLowerCase())) ||
+                            (b.arabicTitle && b.arabicTitle.toLowerCase().includes(bookSearch.toLowerCase())) ||
+                            b.author.toLowerCase().includes(bookSearch.toLowerCase()) ||
+                            (b.publisher && b.publisher.toLowerCase().includes(bookSearch.toLowerCase()));
+                          const matchCat = bookCategoryFilter === 'Semua' || b.category === bookCategoryFilter;
+                          const matchSt = bookStockFilter === 'all' || b.stockStatus === bookStockFilter;
+                          return matchSearch && matchCat && matchSt;
+                        }).length
+                      }
+                    </strong>{' '}
+                    kitab
+                  </span>
+                </div>
+              </div>
+
+              {/* Book Cards Grid */}
+              {(() => {
+                const filtered = booksList.filter((b) => {
+                  const matchSearch =
+                    !bookSearch.trim() ||
+                    b.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
+                    (b.subtitle && b.subtitle.toLowerCase().includes(bookSearch.toLowerCase())) ||
+                    (b.arabicTitle && b.arabicTitle.toLowerCase().includes(bookSearch.toLowerCase())) ||
+                    b.author.toLowerCase().includes(bookSearch.toLowerCase()) ||
+                    (b.publisher && b.publisher.toLowerCase().includes(bookSearch.toLowerCase()));
+                  const matchCat = bookCategoryFilter === 'Semua' || b.category === bookCategoryFilter;
+                  const matchSt = bookStockFilter === 'all' || b.stockStatus === bookStockFilter;
+                  return matchSearch && matchCat && matchSt;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-dashed border-[#cfe0d5] bg-white p-12 text-center">
+                      <ShoppingBag className="mx-auto h-10 w-10 text-[#a0b8aa]" />
+                      <h3 className="mt-3 text-sm font-bold text-[#112d22]">
+                        Tidak ada kitab yang sesuai kriteria pencarian
+                      </h3>
+                      <p className="mt-1 text-xs text-[#6c8577]">
+                        Coba ubah kata kunci pencarian, filter kategori, atau tambahkan kitab baru ke katalog.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBookSearch('');
+                          setBookCategoryFilter('Semua');
+                          setBookStockFilter('all');
+                        }}
+                        className="mt-4 rounded-full border border-[#cfe0d5] bg-white px-4 py-1.5 text-xs font-semibold text-[#006d77] hover:bg-[#edf5f0] cursor-pointer"
+                      >
+                        Reset Filter Pencarian
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {filtered.map((book) => {
+                      const isPreorder = book.stockStatus === 'preorder';
+                      const isReady = book.stockStatus === 'ready';
+                      const isOutOfStock = book.stockStatus === 'out_of_stock';
+                      const isPublished = book.is_published !== false;
+
+                      return (
+                        <div
+                          key={book.id}
+                          className={`rounded-2xl border bg-white overflow-hidden shadow-xs transition hover:shadow-md flex flex-col justify-between ${
+                            !isPublished ? 'border-amber-200 opacity-80' : 'border-[#dce9df]'
+                          }`}
+                        >
+                          {/* Top Visual Cover Bar */}
+                          <div className={`relative h-44 bg-gradient-to-br ${book.gradientCover || 'from-[#0b2b30] via-[#006d77] to-[#83c5be]'} p-4 flex flex-col justify-between text-white overflow-hidden`}>
+                            {book.coverImage && (
+                              <img
+                                src={book.coverImage}
+                                alt={book.title}
+                                className="absolute inset-0 h-full w-full object-cover object-center opacity-40 mix-blend-overlay"
+                              />
+                            )}
+                            <div className="relative z-10 flex items-center justify-between">
+                              <span className="rounded-full bg-black/30 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/95">
+                                {book.category}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
+                                    isPreorder
+                                      ? 'bg-amber-400 text-amber-950'
+                                      : isReady
+                                      ? 'bg-emerald-400 text-emerald-950'
+                                      : 'bg-rose-400 text-rose-950'
+                                  }`}
+                                >
+                                  {isPreorder ? 'Pre-Order' : isReady ? 'Ready Stock' : 'Stok Habis'}
+                                </span>
+                                {!isPublished && (
+                                  <span className="rounded-full bg-neutral-900/80 text-amber-200 px-2 py-0.5 text-[9px] font-bold">
+                                    Draft
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="relative z-10 mt-auto">
+                              {book.arabicTitle && (
+                                <p className="font-serif text-sm font-bold text-amber-200/90 drop-shadow-xs line-clamp-1">
+                                  {book.arabicTitle}
+                                </p>
+                              )}
+                              <h3 className="font-bold text-base text-white leading-tight drop-shadow-xs mt-0.5 line-clamp-2">
+                                {book.title}
+                              </h3>
+                              <p className="text-[11px] text-emerald-100/90 mt-1 line-clamp-1">
+                                Karya {book.author}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Card Content Details */}
+                          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                            <div className="space-y-2.5">
+                              {/* Subtitle / Foreword */}
+                              {book.subtitle && (
+                                <p className="text-xs text-[#526d5f] leading-relaxed line-clamp-2 italic">
+                                  "{book.subtitle}"
+                                </p>
+                              )}
+
+                              {/* Price & Target */}
+                              <div className="flex items-baseline justify-between pt-1 border-t border-[#edf4ef]">
+                                <div>
+                                  <span className="text-xs text-[#71877b] block text-[10px]">Harga Kitab:</span>
+                                  <span className="text-base font-extrabold text-[#006d77]">
+                                    Rp {book.price.toLocaleString('id-ID')}
+                                  </span>
+                                  {book.originalPrice && book.originalPrice > book.price && (
+                                    <span className="ml-2 text-xs text-[#95a89e] line-through font-semibold">
+                                      Rp {book.originalPrice.toLocaleString('id-ID')}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] font-bold text-[#627a6d] bg-[#f0f6f2] px-2 py-1 rounded-md max-w-[140px] truncate text-right">
+                                  {book.publisher}
+                                </span>
+                              </div>
+
+                              {/* Physical Specs Pills */}
+                              <div className="flex flex-wrap gap-1.5 pt-1 text-[10px] text-[#556e61]">
+                                {book.pages > 0 && (
+                                  <span className="rounded bg-[#f4f7f5] px-2 py-0.5 font-medium border border-[#e1ece4]">
+                                    {book.pages} Halaman
+                                  </span>
+                                )}
+                                {book.coverType && (
+                                  <span className="rounded bg-[#f4f7f5] px-2 py-0.5 font-medium border border-[#e1ece4]">
+                                    {book.coverType}
+                                  </span>
+                                )}
+                                {book.paperType && (
+                                  <span className="rounded bg-[#f4f7f5] px-2 py-0.5 font-medium border border-[#e1ece4]">
+                                    {book.paperType}
+                                  </span>
+                                )}
+                                {book.weight && (
+                                  <span className="rounded bg-[#f4f7f5] px-2 py-0.5 font-medium border border-[#e1ece4]">
+                                    {book.weight}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Target Region */}
+                              {book.targetRegion && (
+                                <p className="text-[10.5px] text-[#71877b] flex items-center gap-1">
+                                  <Truck className="h-3 w-3 text-[#006d77] shrink-0" />
+                                  <span className="truncate">{book.targetRegion}</span>
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Card Footer Actions */}
+                            <div className="pt-3 border-t border-[#edf4ef] space-y-2">
+                              {/* Quick Status Toggles */}
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-[#71877b]">Stok:</span>
+                                  <select
+                                    value={book.stockStatus}
+                                    onChange={(e) => handleToggleBookStock(book, e.target.value as any)}
+                                    className="rounded-md border border-[#cbded0] bg-white px-2 py-1 text-[10.5px] font-bold text-[#112d22] cursor-pointer focus:border-[#006d77]"
+                                  >
+                                    <option value="ready">Ready Stock</option>
+                                    <option value="preorder">Pre-Order</option>
+                                    <option value="out_of_stock">Stok Habis</option>
+                                  </select>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBookPublish(book)}
+                                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-bold transition cursor-pointer ${
+                                    isPublished
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                      : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                                  }`}
+                                  title={isPublished ? 'Klik untuk sembunyikan' : 'Klik untuk tayangkan'}
+                                >
+                                  {isPublished ? <Eye className="h-3 w-3 text-emerald-600" /> : <EyeOff className="h-3 w-3 text-amber-600" />}
+                                  <span>{isPublished ? 'Tayang' : 'Disembunyikan'}</span>
+                                </button>
+                              </div>
+
+                              {/* Action Buttons: Edit, View, Delete */}
+                              <div className="flex items-center gap-1.5 pt-1">
+                                <a
+                                  href={`/buku#${book.slug}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl border border-[#cfe0d5] bg-[#fbfdfc] py-2 text-xs font-bold text-[#556e61] hover:bg-[#edf5f0] hover:text-[#006d77] transition cursor-pointer"
+                                  title="Lihat tampilan kitab di halaman Toko Buku"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <span>Toko</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingBook(book);
+                                    setIsCreatingBook(false);
+                                  }}
+                                  className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-[#006d77] py-2 text-xs font-bold text-white hover:bg-[#00545c] transition cursor-pointer shadow-2xs"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  <span>Edit Kitab</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteBookItem(book.id, book.title)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                  title="Hapus kitab dari katalog"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Bookstore Contact & Delivery Settings Card */}
+              <div className="rounded-2xl border border-[#dce9df] bg-gradient-to-r from-[#f0f8f5] to-[#fcfdfd] p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-[#006d77]" />
+                      <h3 className="text-sm font-bold text-[#112d22]">
+                        Layanan Kontak Pemesanan &amp; Logistik Pengiriman
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#5c7768] leading-relaxed max-w-2xl">
+                      Nomor WhatsApp Toko: <strong className="text-[#112d22]">{storeContact.whatsappDisplay || storeContact.whatsappNumber}</strong> · Telegram: <strong className="text-[#112d22]">@{storeContact.telegramUser}</strong> · Instagram: <strong className="text-[#112d22]">{storeContact.publishingInstagram || storeContact.instagram}</strong>
+                    </p>
+                    <p className="text-[11px] text-[#71877b] italic">
+                      "{storeContact.deliveryNotes}"
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStoreContactDraft({ ...storeContact });
+                      setIsEditingStoreContact(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] transition cursor-pointer self-start sm:self-auto shrink-0"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Ubah Kontak &amp; Pengiriman</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -7653,6 +8371,669 @@ create policy testimonials_admin_manage on public.testimonials for all to authen
                 >
                   <Save className="h-4 w-4" />
                   <span>{saving ? 'Menyimpan...' : 'Simpan Testimoni'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: BOOK EDITOR MODAL                                                  */}
+      {/* ========================================================================= */}
+      {editingBook && (
+        <div className="fixed inset-0 z-[75] grid place-items-center bg-[#102c22]/60 p-3 sm:p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 cursor-default" onClick={() => setEditingBook(null)} />
+          <section className="relative max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#dce9df] bg-white shadow-[0_28px_90px_rgba(16,44,34,0.25)] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#e5eee8] px-5 py-4 sm:px-6 sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
+                  <BookMarked className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-[#006d77]">
+                    {isCreatingBook ? 'Tambah Kitab Baru' : 'Perbarui Data Kitab'}
+                  </p>
+                  <h2 className="text-base sm:text-lg font-bold text-[#112d22] line-clamp-1">
+                    {editingBook.title || 'Formulir Data Kitab'}
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBook(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:bg-[#edf5f0] hover:text-[#006d77] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveBookItem} className="p-5 sm:p-6 space-y-6">
+              {/* Bagian 1: Identitas Kitab */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#006d77] border-b border-[#edf4ef] pb-1.5 flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>1. Identitas &amp; Mu'allif Kitab</span>
+                </h3>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Judul Lengkap Kitab <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editingBook.title}
+                      onChange={(e) => setEditingBook({ ...editingBook, title: e.target.value })}
+                      placeholder="Contoh: Gerbang Akidah Ahlusunnah"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Subjudul / Penjelas Terjemah
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.subtitle || ''}
+                      onChange={(e) => setEditingBook({ ...editingBook, subtitle: e.target.value })}
+                      placeholder="Contoh: Terjemah, Syarah dan Catatan Nazam..."
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Judul Asli Arab (Matan / Kitab Asli)
+                    </label>
+                    <input
+                      type="text"
+                      dir="rtl"
+                      value={editingBook.arabicTitle}
+                      onChange={(e) => setEditingBook({ ...editingBook, arabicTitle: e.target.value })}
+                      placeholder="مثال: الخريدة البهية في العقيدة السنية"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] font-serif font-bold focus:border-[#006d77] focus:outline-hidden text-right"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Penulis / Mu'allif / Penerjemah <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editingBook.author}
+                      onChange={(e) => setEditingBook({ ...editingBook, author: e.target.value })}
+                      placeholder="Contoh: Imam Ahmad ad-Dardir / Ust. Watra Sarajeva"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Kategori Ilmu
+                    </label>
+                    <select
+                      value={editingBook.category}
+                      onChange={(e) => setEditingBook({ ...editingBook, category: e.target.value })}
+                      className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    >
+                      {BOOK_CATEGORIES.filter((c) => c !== 'Semua').map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Penerbit / Publisher
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.publisher}
+                      onChange={(e) => setEditingBook({ ...editingBook, publisher: e.target.value })}
+                      placeholder="Al-Madraj Publishing"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Kata Pengantar (Taqdim)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.foreword || ''}
+                      onChange={(e) => setEditingBook({ ...editingBook, foreword: e.target.value })}
+                      placeholder="Contoh: Dr. Syekh Yusri Rusydi..."
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 2: Harga, Stok & Wilayah */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#006d77] border-b border-[#edf4ef] pb-1.5 flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  <span>2. Harga &amp; Status Ketersediaan Stok</span>
+                </h3>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Harga Jual (Rp) <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      step={1000}
+                      value={editingBook.price}
+                      onChange={(e) => setEditingBook({ ...editingBook, price: Number(e.target.value) || 0 })}
+                      placeholder="75000"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] font-bold focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Harga Normal / Coret (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={editingBook.originalPrice || ''}
+                      onChange={(e) => setEditingBook({ ...editingBook, originalPrice: e.target.value ? Number(e.target.value) : undefined })}
+                      placeholder="90000"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#71877b] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Status Stok Buku
+                    </label>
+                    <select
+                      value={editingBook.stockStatus}
+                      onChange={(e) => setEditingBook({ ...editingBook, stockStatus: e.target.value as any })}
+                      className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs text-[#112d22] font-bold focus:border-[#006d77] focus:outline-hidden"
+                    >
+                      <option value="ready">Ready Stock (Tersedia)</option>
+                      <option value="preorder">Pre-Order (Buka Kuota)</option>
+                      <option value="out_of_stock">Stok Habis (Habis)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Target Wilayah / Catatan Distribusi
+                  </label>
+                  <input
+                    type="text"
+                    value={editingBook.targetRegion || ''}
+                    onChange={(e) => setEditingBook({ ...editingBook, targetRegion: e.target.value })}
+                    placeholder="Contoh: Khusus Mahasiswa Al-Azhar di Mesir & Pengiriman ke Indonesia"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Bagian 3: Sampul Visual & Fisik */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#006d77] border-b border-[#edf4ef] pb-1.5 flex items-center gap-1.5">
+                  <Camera className="h-3.5 w-3.5" />
+                  <span>3. Tampilan Sampul &amp; Spesifikasi Fisik</span>
+                </h3>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    URL Gambar Sampul (Opsional)
+                  </label>
+                  <input
+                    type="url"
+                    value={editingBook.coverImage || ''}
+                    onChange={(e) => setEditingBook({ ...editingBook, coverImage: e.target.value })}
+                    placeholder="https://... (Kosongkan jika menggunakan gradient sampul)"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1.5">
+                    Pilihan Tema Warna Sampul Gradient
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {[
+                      { name: 'Teal Khas', val: 'from-[#0b2b30] via-[#006d77] to-[#83c5be]' },
+                      { name: 'Emerald', val: 'from-[#1a2f23] via-[#2d5a3f] to-[#40825c]' },
+                      { name: 'Bronze', val: 'from-[#2c1d11] via-[#5c3d24] to-[#8c5c37]' },
+                      { name: 'Indigo', val: 'from-[#1b1c3a] via-[#32366b] to-[#5057a6]' },
+                      { name: 'Burgundy', val: 'from-[#2c0e14] via-[#5c1d2b] to-[#8e2e43]' },
+                      { name: 'Midnight', val: 'from-[#191919] via-[#333333] to-[#7f6a2b]' },
+                    ].map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        onClick={() => setEditingBook({ ...editingBook, gradientCover: c.val })}
+                        className={`h-11 rounded-xl bg-gradient-to-br ${c.val} p-1 text-[10px] font-bold text-white flex flex-col justify-end items-center transition cursor-pointer ${
+                          editingBook.gradientCover === c.val
+                            ? 'ring-2 ring-offset-2 ring-[#006d77] scale-102'
+                            : 'opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <span className="bg-black/40 backdrop-blur-xs px-1.5 py-0.5 rounded text-[9px] w-full text-center truncate">
+                          {c.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Jumlah Halaman
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingBook.pages}
+                      onChange={(e) => setEditingBook({ ...editingBook, pages: Number(e.target.value) || 0 })}
+                      placeholder="120"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Jenis Sampul / Cover
+                    </label>
+                    <select
+                      value={editingBook.coverType}
+                      onChange={(e) => setEditingBook({ ...editingBook, coverType: e.target.value })}
+                      className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    >
+                      <option value="Soft Cover">Soft Cover</option>
+                      <option value="Hard Cover">Hard Cover</option>
+                      <option value="Mujallad Lux">Mujallad Lux</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Jenis Kertas
+                    </label>
+                    <select
+                      value={editingBook.paperType}
+                      onChange={(e) => setEditingBook({ ...editingBook, paperType: e.target.value })}
+                      className="w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    >
+                      <option value="Kertas Bookpaper">Kertas Bookpaper</option>
+                      <option value="Kertas Shamois (Kuning)">Kertas Shamois (Kuning)</option>
+                      <option value="Kertas HVS Putih">Kertas HVS Putih</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Estimasi Berat
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.weight}
+                      onChange={(e) => setEditingBook({ ...editingBook, weight: e.target.value })}
+                      placeholder="250 gram"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 4: Deskripsi & Fitur Keunggulan */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#006d77] border-b border-[#edf4ef] pb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>4. Deskripsi &amp; Poin Keunggulan</span>
+                </h3>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Deskripsi Ringkas Kitab
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editingBook.description}
+                    onChange={(e) => setEditingBook({ ...editingBook, description: e.target.value })}
+                    placeholder="Tuliskan latar belakang kitab, bahasan pokok, dan manfaat bagi penuntut ilmu..."
+                    className="w-full rounded-xl border border-[#cbded0] p-3 text-xs text-[#112d22] leading-relaxed focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Poin-Poin Keunggulan (Satu poin per baris)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={Array.isArray(editingBook.keyFeatures) ? editingBook.keyFeatures.join('\n') : ''}
+                    onChange={(e) => setEditingBook({ ...editingBook, keyFeatures: e.target.value.split('\n') })}
+                    placeholder="Contoh:&#10;Teks arab berharakat lengkap dan muhaqqaq&#10;Terjemah lugas dengan bahasa akademik santun&#10;Disertai ta'liq catatan kaki para ulama Al-Azhar"
+                    className="w-full rounded-xl border border-[#cbded0] p-3 text-xs text-[#112d22] font-mono leading-relaxed focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Bagian 5: Kontak Pemesanan & Pembayaran */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#006d77] border-b border-[#edf4ef] pb-1.5 flex items-center gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>5. Kontak Pemesanan &amp; Rekening Pembayaran</span>
+                </h3>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Nama Penanggung Jawab (PJ) Pemesanan
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.contactPerson?.name || ''}
+                      onChange={(e) => setEditingBook({
+                        ...editingBook,
+                        contactPerson: {
+                          name: e.target.value,
+                          whatsapp: editingBook.contactPerson?.whatsapp || storeContact.whatsappNumber,
+                          whatsappDisplay: editingBook.contactPerson?.whatsappDisplay || storeContact.whatsappDisplay,
+                        }
+                      })}
+                      placeholder="Ust. M. Zulfikar Sulkhi A."
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Nomor WhatsApp PJ (Awali 62 tanpa spasi)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.contactPerson?.whatsapp || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        setEditingBook({
+                          ...editingBook,
+                          contactPerson: {
+                            name: editingBook.contactPerson?.name || 'Admin Pustaka',
+                            whatsapp: val,
+                            whatsappDisplay: '+' + val,
+                          }
+                        });
+                      }}
+                      placeholder="6282310462582"
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Template Pesan WhatsApp Otomatis
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBook.whatsappMessage || ''}
+                      onChange={(e) => setEditingBook({ ...editingBook, whatsappMessage: e.target.value })}
+                      placeholder="Assalamu'alaikum, saya ingin memesan buku..."
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#17382c] mb-1">
+                      Link Eksternal Pemesanan (Shopee / Tokopedia / Google Form)
+                    </label>
+                    <input
+                      type="url"
+                      value={editingBook.purchaseUrl || ''}
+                      onChange={(e) => setEditingBook({ ...editingBook, purchaseUrl: e.target.value })}
+                      placeholder="https://shopee.co.id/... atau https://forms.gle/..."
+                      className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 6: Visibilitas & Urutan */}
+              <div className="flex items-center justify-between pt-2 border-t border-[#edf4ef]">
+                <label className="flex items-center gap-2 text-xs font-bold text-[#112d22] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editingBook.is_published !== false}
+                    onChange={(e) => setEditingBook({ ...editingBook, is_published: e.target.checked })}
+                    className="h-4 w-4 rounded border-[#cbded0] text-[#006d77] focus:ring-[#006d77]"
+                  />
+                  <span>Tayangkan di Halaman Katalog Toko Buku (/buku)</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#6c8577]">Urutan Tampil:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingBook.sort_order || 1}
+                    onChange={(e) => setEditingBook({ ...editingBook, sort_order: Number(e.target.value) || 1 })}
+                    className="w-14 rounded-lg border border-[#cbded0] px-2 py-1 text-center text-xs font-bold text-[#112d22]"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="mt-6 pt-4 border-t border-[#edf4ef] flex items-center justify-end gap-2 sticky bottom-0 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setEditingBook(null)}
+                  className="rounded-full border border-[#cfe0d5] px-4 py-2 text-xs font-semibold text-[#556e61] cursor-pointer hover:bg-[#edf5f0]"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] disabled:opacity-60 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? 'Menyimpan...' : 'Simpan Data Kitab'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: BOOKSTORE CONTACT & DELIVERY SETTINGS MODAL                         */}
+      {/* ========================================================================= */}
+      {isEditingStoreContact && (
+        <div className="fixed inset-0 z-[75] grid place-items-center bg-[#102c22]/60 p-3 sm:p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 cursor-default" onClick={() => setIsEditingStoreContact(false)} />
+          <section className="relative max-h-[94dvh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#dce9df] bg-white shadow-[0_28px_90px_rgba(16,44,34,0.25)] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#e5eee8] px-5 py-4 sm:px-6 sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
+                  <Truck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-[#006d77]">
+                    Pengaturan Toko
+                  </p>
+                  <h2 className="text-base sm:text-lg font-bold text-[#112d22]">
+                    Kontak Layanan &amp; Pengiriman Pustaka
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingStoreContact(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:bg-[#edf5f0] hover:text-[#006d77] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveStoreContact} className="p-5 sm:p-6 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Nomor WhatsApp Toko (Awali 62) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={storeContactDraft.whatsappNumber}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      whatsappNumber: e.target.value.replace(/[^0-9]/g, '')
+                    })}
+                    placeholder="6282310462582"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Tampilan Nomor WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={storeContactDraft.whatsappDisplay}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      whatsappDisplay: e.target.value
+                    })}
+                    placeholder="+62 823-1046-2582"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Username Telegram (tanpa @)
+                  </label>
+                  <input
+                    type="text"
+                    value={storeContactDraft.telegramUser}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      telegramUser: e.target.value.replace(/^@/, '')
+                    })}
+                    placeholder="almadraj_edu"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Instagram Utama
+                  </label>
+                  <input
+                    type="text"
+                    value={storeContactDraft.instagram}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      instagram: e.target.value
+                    })}
+                    placeholder="@almadraj_edu"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Instagram Penerbitan
+                  </label>
+                  <input
+                    type="text"
+                    value={storeContactDraft.publishingInstagram}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      publishingInstagram: e.target.value
+                    })}
+                    placeholder="@almadraj.publishing"
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Link Toko Shopee (Opsional)
+                  </label>
+                  <input
+                    type="url"
+                    value={storeContactDraft.shopeeStoreUrl}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      shopeeStoreUrl: e.target.value
+                    })}
+                    placeholder="https://shopee.co.id/..."
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#17382c] mb-1">
+                    Link Toko Tokopedia (Opsional)
+                  </label>
+                  <input
+                    type="url"
+                    value={storeContactDraft.tokopediaStoreUrl}
+                    onChange={(e) => setStoreContactDraft({
+                      ...storeContactDraft,
+                      tokopediaStoreUrl: e.target.value
+                    })}
+                    placeholder="https://tokopedia.com/..."
+                    className="w-full rounded-xl border border-[#cbded0] px-3 py-2 text-xs text-[#112d22] focus:border-[#006d77] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#17382c] mb-1">
+                  Catatan Kebijakan Logistik / Pengiriman
+                </label>
+                <textarea
+                  rows={3}
+                  value={storeContactDraft.deliveryNotes}
+                  onChange={(e) => setStoreContactDraft({
+                    ...storeContactDraft,
+                    deliveryNotes: e.target.value
+                  })}
+                  placeholder="Melayani pengiriman resmi di wilayah Kairo (Mesir) khusus Masisir & pengiriman ke seluruh pelosok Indonesia via ekspedisi terpercaya."
+                  className="w-full rounded-xl border border-[#cbded0] p-3 text-xs text-[#112d22] leading-relaxed focus:border-[#006d77] focus:outline-hidden"
+                />
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="mt-6 pt-4 border-t border-[#edf4ef] flex items-center justify-end gap-2 sticky bottom-0 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingStoreContact(false)}
+                  className="rounded-full border border-[#cfe0d5] px-4 py-2 text-xs font-semibold text-[#556e61] cursor-pointer hover:bg-[#edf5f0]"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] disabled:opacity-60 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? 'Menyimpan...' : 'Simpan Pengaturan Kontak'}</span>
                 </button>
               </div>
             </form>
