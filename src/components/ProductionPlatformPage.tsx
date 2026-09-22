@@ -18,7 +18,9 @@ import {
   deleteTestimonial,
   getStoredTestimonials,
   setStoredTestimonials,
-  DEFAULT_TESTIMONIALS
+  DEFAULT_TESTIMONIALS,
+  checkTestimonialsTableStatus,
+  DatabaseSyncStatus
 } from '../data/testimonialsData';
 
 type ProgramType = 'Dars' | 'Bimbel';
@@ -4765,6 +4767,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [testimonialSearch, setTestimonialSearch] = useState('');
   const [testimonialStatusFilter, setTestimonialStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
   const [copiedTestiSql, setCopiedTestiSql] = useState(false);
+  const [dbSyncStatus, setDbSyncStatus] = useState<DatabaseSyncStatus>('checking');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -4865,6 +4868,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       setOrders((orderResult.data || []).map((item: any) => ({ ...item, profiles: item.profiles?.[0], courses: item.courses?.[0] })) as ProductionAdminOrder[]);
       setProgressRows((progressResult.data || []) as ProductionAdminProgress[]);
       loadTestimonials().then((items) => { if (items && items.length) setTestimonialsList(items); }).catch(() => null);
+      checkTestimonialsTableStatus().then(setDbSyncStatus);
     } catch (loadError) {
       onError(loadError instanceof Error ? loadError.message : 'Data operasional gagal dimuat.');
     } finally {
@@ -4946,11 +4950,12 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         sort_order: Number(editingTestimonial.sort_order) || testimonialsList.length + 1,
       };
 
-      await saveTestimonial(payload);
+      const { syncedWithDb } = await saveTestimonial(payload);
       setTestimonialsList(getStoredTestimonials());
       setEditingTestimonial(null);
       setIsCreatingTestimonial(false);
-      await recordAudit('testimonial.saved', 'testimonial', payload.id, { name: payload.name });
+      checkTestimonialsTableStatus().then(setDbSyncStatus);
+      await recordAudit('testimonial.saved', 'testimonial', payload.id, { name: payload.name, syncedWithDb });
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Gagal menyimpan testimoni');
     } finally {
@@ -6478,6 +6483,70 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </div>
                 </div>
 
+                {/* Database Connection Status Banner */}
+                {dbSyncStatus === 'table_missing' && (
+                  <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                          <span>⚠️</span>
+                          <span>Tabel Database Supabase Belum Dibuat</span>
+                        </p>
+                        <p className="text-[11px] text-amber-800 leading-relaxed max-w-2xl">
+                          Saat ini testimoni baru tersimpan di browser perangkat Anda. Agar testimoni yang Anda edit <strong>pasti muncul untuk seluruh pengunjung dari HP/laptop lain di seluruh dunia</strong>, silakan salin skrip SQL di bawah dan jalankan 1x di <strong>Supabase SQL Editor</strong>.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sql = `-- Migration: public.testimonials
+create table if not exists public.testimonials (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  initials text,
+  role text not null,
+  university text default '',
+  tag text default 'Masisir Kairo',
+  course text default '',
+  year text default '',
+  rating numeric default 5.0,
+  avatar_color text default 'from-[#006d77] to-[#148369]',
+  avatar_url text default '',
+  quote text not null,
+  is_active boolean default true,
+  sort_order integer default 0,
+  created_at timestamptz default now()
+);
+alter table public.testimonials enable row level security;
+drop policy if exists testimonials_public_read on public.testimonials;
+create policy testimonials_public_read on public.testimonials for select using (true);
+drop policy if exists testimonials_admin_manage on public.testimonials;
+create policy testimonials_admin_manage on public.testimonials for all to authenticated using (public.is_lms_admin()) with check (public.is_lms_admin());`;
+                          navigator.clipboard.writeText(sql).then(() => {
+                            setCopiedTestiSql(true);
+                            setTimeout(() => setCopiedTestiSql(false), 2500);
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-700 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-800 transition cursor-pointer self-start sm:self-auto shrink-0 shadow-xs"
+                      >
+                        {copiedTestiSql ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedTestiSql ? 'Skrip SQL Tersalin!' : 'Salin Skrip SQL Supabase'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {dbSyncStatus === 'synced' && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2 flex items-center justify-between text-xs text-emerald-900">
+                    <span className="flex items-center gap-1.5 font-medium text-[11.5px]">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      Database Supabase Aktif: Testimoni tersinkronisasi online dan langsung tampil ke semua pengunjung.
+                    </span>
+                    <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-[10px]">
+                      Live Synced
+                    </span>
+                  </div>
+                )}
+
                 {/* Stats Summary */}
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-[#edf5f0]">
                   <div className="rounded-xl border border-[#dce9df] bg-[#f7faf8] p-3.5">
@@ -6736,8 +6805,10 @@ create table if not exists public.testimonials (
   created_at timestamptz default now()
 );
 alter table public.testimonials enable row level security;
-create policy "Public read testimonials" on public.testimonials for select using (true);
-create policy "Admin manage testimonials" on public.testimonials for all using (true);`;
+drop policy if exists testimonials_public_read on public.testimonials;
+create policy testimonials_public_read on public.testimonials for select using (true);
+drop policy if exists testimonials_admin_manage on public.testimonials;
+create policy testimonials_admin_manage on public.testimonials for all to authenticated using (public.is_lms_admin()) with check (public.is_lms_admin());`;
                     navigator.clipboard.writeText(sql).then(() => {
                       setCopiedTestiSql(true);
                       setTimeout(() => setCopiedTestiSql(false), 2500);

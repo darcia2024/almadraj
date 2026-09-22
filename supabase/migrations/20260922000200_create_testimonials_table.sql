@@ -1,5 +1,5 @@
 -- Migration: Create testimonials table for dynamic landing page reviews
--- Run this in Supabase SQL Editor if table does not exist
+-- Run this in Supabase SQL Editor
 
 create table if not exists public.testimonials (
   id uuid primary key default gen_random_uuid(),
@@ -24,30 +24,20 @@ create table if not exists public.testimonials (
 alter table public.testimonials enable row level security;
 
 -- Public can read all active testimonials
-create policy "Allow public read active testimonials"
+drop policy if exists testimonials_public_read on public.testimonials;
+create policy testimonials_public_read
   on public.testimonials
   for select
   using (true);
 
 -- Authenticated admins can manage (insert/update/delete) testimonials
-create policy "Allow admins to manage testimonials"
+drop policy if exists testimonials_admin_manage on public.testimonials;
+create policy testimonials_admin_manage
   on public.testimonials
   for all
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role = 'admin'
-    )
-  );
+  using (public.is_lms_admin())
+  with check (public.is_lms_admin());
 
 -- Seed default authentic testimonials
 insert into public.testimonials (name, initials, role, university, tag, course, year, rating, avatar_color, quote, is_active, sort_order)

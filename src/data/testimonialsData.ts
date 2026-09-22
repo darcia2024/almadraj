@@ -175,7 +175,22 @@ export const loadTestimonials = async (): Promise<TestimonialItem[]> => {
   return getStoredTestimonials();
 };
 
-export const saveTestimonial = async (item: TestimonialItem): Promise<TestimonialItem> => {
+export type DatabaseSyncStatus = 'checking' | 'synced' | 'table_missing' | 'offline';
+
+export const checkTestimonialsTableStatus = async (): Promise<DatabaseSyncStatus> => {
+  if (!supabaseConfigured || !supabase) return 'offline';
+  try {
+    const { error } = await supabase.from('testimonials').select('id').limit(1);
+    if (error) {
+      return 'table_missing';
+    }
+    return 'synced';
+  } catch {
+    return 'table_missing';
+  }
+};
+
+export const saveTestimonial = async (item: TestimonialItem): Promise<{ item: TestimonialItem; syncedWithDb: boolean; error?: string }> => {
   const current = getStoredTestimonials();
   const index = current.findIndex((t) => t.id === item.id);
   let updatedList: TestimonialItem[];
@@ -188,6 +203,9 @@ export const saveTestimonial = async (item: TestimonialItem): Promise<Testimonia
   }
 
   setStoredTestimonials(updatedList);
+
+  let syncedWithDb = false;
+  let dbError: string | undefined;
 
   if (supabaseConfigured && supabase) {
     try {
@@ -222,13 +240,16 @@ export const saveTestimonial = async (item: TestimonialItem): Promise<Testimonia
         item.id = data.id;
         const freshList = updatedList.map((t) => (t.id === item.id || t.name === item.name ? { ...t, id: data.id } : t));
         setStoredTestimonials(freshList);
+        syncedWithDb = true;
+      } else if (error) {
+        dbError = error.message;
       }
-    } catch {
-      // Ignored for offline/fallback
+    } catch (err: any) {
+      dbError = err?.message || 'Database error';
     }
   }
 
-  return item;
+  return { item, syncedWithDb, error: dbError };
 };
 
 export const deleteTestimonial = async (id: string): Promise<void> => {
