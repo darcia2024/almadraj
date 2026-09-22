@@ -5532,8 +5532,22 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                             <span className="rounded-full bg-[#006d77] px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
                               {selectedCourse.program_type || 'Dars'}
                             </span>
-                            <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ' + ((selectedCourse.program_type || 'Dars') === 'Dars' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : (selectedCourse.media_format || 'audio') === 'audio' ? 'bg-cyan-50 border border-cyan-200 text-cyan-800' : 'bg-blue-50 border border-blue-200 text-blue-800')}>
-                              {(selectedCourse.program_type || 'Dars') === 'Dars' ? '🎬 Format: Video Dars' : (selectedCourse.media_format || 'audio') === 'audio' ? '🎙️ Format: Audio Bimbel' : '🎬 Format: Video Bimbel'}
+                            <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ' + (
+                              (selectedCourse.program_type || 'Dars') === 'Dars'
+                                ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                                : (selectedCourse.media_format || 'audio') === 'video'
+                                ? 'bg-red-50 border border-red-200 text-red-800'
+                                : (selectedCourse.media_format || 'audio') === 'hybrid'
+                                ? 'bg-purple-50 border border-purple-200 text-purple-800'
+                                : 'bg-cyan-50 border border-cyan-200 text-cyan-800'
+                            )}>
+                              {(selectedCourse.program_type || 'Dars') === 'Dars'
+                                ? '🎬 Format: Video Dars'
+                                : (selectedCourse.media_format || 'audio') === 'video'
+                                ? '🎬 Format: Video Bimbel (YouTube)'
+                                : (selectedCourse.media_format || 'audio') === 'hybrid'
+                                ? '⚡ Format: Hybrid Bimbel'
+                                : '🎙️ Format: Audio Bimbel (Google Drive)'}
                             </span>
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${selectedCourse.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'}`}>
                               {selectedCourse.is_published ? '✓ Published' : 'Draft'}
@@ -5640,6 +5654,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                       {selectedCourseLessons.map((l) => {
                         const isAudio = l.content_type === 'audio';
                         const isVideo = l.content_type === 'video';
+                        const isYt = Boolean(l.content_url && youtubeVideoId(l.content_url));
+                        const isGd = Boolean(l.content_url && getGoogleDriveEmbedUrl(l.content_url));
                         const photoCount = l.board_photos?.length || 0;
                         return (
                           <div key={l.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
@@ -5670,7 +5686,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                                   )}
                                 </div>
                                 <p className="mt-0.5 text-[11px] text-[#71877b] truncate max-w-md">
-                                  {l.content_type.toUpperCase()} · Durasi: {l.duration || 'Belum diisi'} · {l.content_url || 'URL belum ada'}
+                                  {isAudio ? '🎙️ Audio' : isVideo ? '🎬 Video' : l.content_type.toUpperCase()}
+                                  {isYt ? ' (YouTube)' : isGd ? ' (Google Drive)' : ''} · Durasi: {l.duration || 'Belum diisi'} · {l.content_url || 'URL belum ada'}
                                 </p>
                               </div>
                             </div>
@@ -5762,7 +5779,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   const cleanMail = (c.pj_email || '').toLowerCase().trim();
                   const matchedUser = registeredUsers.find((u) => (u.email || '').toLowerCase().trim() === cleanMail);
                   const isDars = (c.program_type || 'Dars') === 'Dars';
-                  const isAudio = !isDars && (c.media_format || 'audio') === 'audio';
+                  const format = isDars ? 'video' : (c.media_format || 'audio');
 
                   return (
                     <div
@@ -5775,8 +5792,22 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                           <span className="rounded-full bg-[#006d77] px-2.5 py-0.5 text-[9px] font-bold text-white uppercase">
                             {c.program_type || (isDars ? 'Dars' : 'Bimbel')}
                           </span>
-                          <span className={'rounded-full px-2 py-0.5 text-[9px] font-bold ' + (isDars ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : isAudio ? 'bg-cyan-50 text-cyan-800 border border-cyan-200' : 'bg-blue-50 text-blue-800 border border-blue-200')}>
-                            {isDars ? '🎬 Video Dars' : isAudio ? '🎙️ Audio Bimbel' : '🎬 Video Bimbel'}
+                          <span className={'rounded-full px-2 py-0.5 text-[9px] font-bold ' + (
+                            isDars
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : format === 'video'
+                              ? 'bg-red-50 text-red-800 border border-red-200'
+                              : format === 'hybrid'
+                              ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                              : 'bg-cyan-50 text-cyan-800 border border-cyan-200'
+                          )}>
+                            {isDars
+                              ? '🎬 Video Dars'
+                              : format === 'video'
+                              ? '🎬 Video Bimbel (YouTube)'
+                              : format === 'hybrid'
+                              ? '⚡ Hybrid (Drive + YouTube)'
+                              : '🎙️ Audio Bimbel (Google Drive)'}
                           </span>
                         </div>
 
@@ -6232,12 +6263,20 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                         </p>
                       </div>
                     ) : (
-                      <ProductionAdminSelect
-                        label="Format Media Pembelajaran"
-                        value={courseDraft.media_format || 'audio'}
-                        onChange={(value) => setCourseDraft({ ...courseDraft, media_format: value as any })}
-                        options={['audio', 'video', 'hybrid']}
-                      />
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-bold text-[#112d22]">
+                          Format Media Pembelajaran (Bimbel)
+                        </span>
+                        <select
+                          value={courseDraft.media_format || 'audio'}
+                          onChange={(e) => setCourseDraft({ ...courseDraft, media_format: e.target.value as any })}
+                          className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-xs sm:text-sm font-medium outline-none focus:border-[#006d77]"
+                        >
+                          <option value="audio">🎙️ Audio Bimbel (Embed Google Drive)</option>
+                          <option value="video">🎬 Video Bimbel (Embed YouTube Video)</option>
+                          <option value="hybrid">⚡ Hybrid (Bisa Audio Drive & Video YouTube)</option>
+                        </select>
+                      </label>
                     )}
                     <ProductionAdminField
                       label="Harga Pendaftaran (Rp)"
@@ -6247,6 +6286,20 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                       placeholder="0 untuk gratis atau 199000"
                     />
                   </div>
+
+                  {courseDraft.program_type === 'Bimbel' && (
+                    <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3.5 text-xs text-cyan-950 flex items-start gap-2.5">
+                      <Sparkles className="h-4 w-4 text-cyan-700 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-cyan-900">Format Materi Bimbel:</strong>
+                        <ul className="mt-1 list-disc list-inside space-y-1 text-cyan-800">
+                          <li><strong>Materi Audio Bimbel:</strong> Di-embed dari <strong>Google Drive</strong> (audio talaqqi).</li>
+                          <li><strong>Materi Video Bimbel:</strong> Di-embed dari link video <strong>YouTube</strong>.</li>
+                          <li><strong>Opsi Hybrid:</strong> Silabus Bimbel dapat mencakup materi audio dan video sekaligus.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
 
                   <ProductionAdminField
                     label="Link Diktat / Modul PDF (Google Drive Embed / PDF Link)"
@@ -6498,16 +6551,16 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                       >
                         {isDarsCourse ? (
                           <>
-                            <option value="video">🎬 Video (Kajian Dars Al Madraj)</option>
+                            <option value="video">🎬 Video Kajian (YouTube / Drive)</option>
                             <option value="pdf">📚 PDF (Diktat / Modul Kitab)</option>
-                            <option value="text">📝 Teks</option>
+                            <option value="text">📝 Teks Materi</option>
                           </>
                         ) : (
                           <>
-                            <option value="audio">🎙️ Audio (Bimbel Talaqqi)</option>
-                            <option value="video">🎬 Video (Bimbel)</option>
+                            <option value="audio">🎙️ Audio Bimbel (Embed Google Drive)</option>
+                            <option value="video">🎬 Video Bimbel (Embed YouTube Video)</option>
                             <option value="pdf">📚 PDF (Modul Bimbel)</option>
-                            <option value="text">📝 Teks</option>
+                            <option value="text">📝 Teks Materi</option>
                           </>
                         )}
                       </select>
@@ -6531,13 +6584,39 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
               <div>
                 <ProductionAdminField
-                  label="URL Konten (Google Drive Embed / YouTube / Audio URL)"
+                  label={
+                    lessonDraft.content_type === 'audio'
+                      ? 'Link File Audio (Google Drive Embed Link)'
+                      : lessonDraft.content_type === 'video'
+                      ? 'Link Video (Embed YouTube / Google Drive Video)'
+                      : lessonDraft.content_type === 'pdf'
+                      ? 'Link Dokumen PDF (Google Drive / Direct PDF URL)'
+                      : 'URL Konten Materi'
+                  }
                   value={lessonDraft.content_url}
                   onChange={(value) => setLessonDraft({ ...lessonDraft, content_url: value })}
-                  placeholder="https://drive.google.com/file/d/.../view atau link YouTube"
+                  placeholder={
+                    lessonDraft.content_type === 'audio'
+                      ? 'https://drive.google.com/file/d/.../view'
+                      : lessonDraft.content_type === 'video'
+                      ? 'https://www.youtube.com/watch?v=... atau https://youtu.be/...'
+                      : 'https://...'
+                  }
                 />
                 <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed">
-                  💡 <strong>Tip Google Drive:</strong> Cukup tempelkan link share file audio dari Google Drive. Sistem Al Madraj otomatis menyulapnya menjadi pemutar audio ramah-kuota dengan waveform dan pengatur kecepatan.
+                  {lessonDraft.content_type === 'audio' ? (
+                    <>
+                      💡 <strong>Audio Google Drive:</strong> Klik kanan file audio di Google Drive &gt; <em>Bagikan (Siapa saja yang memiliki link)</em> &gt; Salin link lalu tempel di sini. Al Madraj otomatis menyematkan pemutar audio di ruang belajar.
+                    </>
+                  ) : lessonDraft.content_type === 'video' ? (
+                    <>
+                      🎬 <strong>Video YouTube:</strong> Masukkan link video YouTube (Unlisted maupun Public) seperti <code>https://youtu.be/xxx</code> atau <code>https://www.youtube.com/watch?v=xxx</code>. Video akan ter-embed otomatis di ruang belajar.
+                    </>
+                  ) : (
+                    <>
+                      💡 Masukkan link Google Drive atau link dokumen PDF / materi untuk santri.
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -7114,7 +7193,7 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
   }
   const activeProgress = activeLesson ? progressPercent(progressByLesson[activeLesson.id], activeLesson) : 0;
   const activeCompleted = Boolean(activeLesson && progressByLesson[activeLesson.id]?.completed_at);
-  const activeYoutubeId = activeLesson?.content_type === 'video' && activeLesson.content_url ? youtubeVideoId(activeLesson.content_url) : '';
+  const activeYoutubeId = activeLesson?.content_url ? youtubeVideoId(activeLesson.content_url) : '';
   const activeYoutubeMetadata = activeLesson ? youtubeMetadataByLesson[activeLesson.id] : undefined;
   const activeLessonTitle = activeLesson?.title || (activeYoutubeMetadata?.title ? activeYoutubeMetadata.title.replace(/\s*\|\s*Al[\s-]?Madraj.*$/i, '').trim() : 'Belum ada materi dipilih');
   const markActiveComplete = () => { if (activeLesson) void toggleDocument(activeLesson); };
@@ -7261,12 +7340,30 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                       </p>
                     </div>
                   )
+                ) : activeLesson?.content_type === 'video' && activeYoutubeId && activeLesson ? (
+                  <YouTubeRestrictedPlayer
+                    videoId={activeYoutubeId}
+                    title={activeLessonTitle}
+                    startSeconds={progressByLesson[activeLesson.id]?.watched_seconds || 0}
+                    onProgress={(watched, duration, force) => {
+                      void persistProgress(activeLesson, watched, duration, false, force);
+                    }}
+                    onComplete={(watched, duration) => {
+                      void persistProgress(activeLesson, watched, duration, true, true);
+                    }}
+                  />
                 ) : activeLesson?.content_type === 'video' && activeLesson.content_url && getGoogleDriveEmbedUrl(activeLesson.content_url) ? (
                   <iframe
                     src={getGoogleDriveEmbedUrl(activeLesson.content_url)!}
                     className="h-full w-full border-0"
                     allow="autoplay; fullscreen"
                     title={activeLessonTitle}
+                  />
+                ) : activeLesson?.content_type === 'video' && activeLesson.content_url ? (
+                  <video
+                    src={activeLesson.content_url}
+                    controls
+                    className="h-full w-full object-contain"
                   />
                 ) : activeYoutubeId && activeLesson ? (
                   <YouTubeRestrictedPlayer
@@ -7754,8 +7851,13 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                 const isCompleted = Boolean(progressByLesson[lesson.id]?.completed_at);
                 const progress = progressPercent(progressByLesson[lesson.id], lesson);
                 const youtubeMetadata = youtubeMetadataByLesson[lesson.id];
+                const isAudio = lesson.content_type === 'audio';
+                const isVideo = lesson.content_type === 'video';
+                const isDrive = Boolean(lesson.content_url && getGoogleDriveEmbedUrl(lesson.content_url));
+                const isYt = Boolean(lesson.content_url && youtubeVideoId(lesson.content_url));
+                const courseCover = getCourseCoverImage(course.slug, course.faculty);
                 const lessonTitle = youtubeMetadata?.title || lesson.title;
-                const thumbnailUrl = youtubeMetadata?.thumbnailUrl || youtubeThumbnailUrl(lesson.content_url || '');
+                const thumbnailUrl = youtubeMetadata?.thumbnailUrl || youtubeThumbnailUrl(lesson.content_url || '') || (isAudio ? courseCover : '');
 
                 return (
                   <button
@@ -7779,13 +7881,32 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-[#006d77]/15 text-[#006d77]">
-                          <CirclePlay className="h-10 w-10" />
+                          {isAudio ? <Headphones className="h-10 w-10 text-[#83c5be]" /> : <CirclePlay className="h-10 w-10" />}
                         </div>
                       )}
 
                       {/* Top-left: Bab Number Badge */}
                       <span className="absolute left-2 top-2 rounded-md bg-black/65 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
                         Materi {index + 1}
+                      </span>
+
+                      {/* Bottom-left: Audio Drive vs Video YouTube Badge */}
+                      <span className={'absolute left-2 bottom-2 rounded-md px-1.5 py-0.5 text-[9px] font-bold backdrop-blur-xs flex items-center gap-1 ' + (
+                        isAudio
+                          ? 'bg-cyan-950/85 text-cyan-200 border border-cyan-700/50'
+                          : isYt
+                          ? 'bg-red-950/85 text-red-200 border border-red-700/50'
+                          : 'bg-emerald-950/85 text-emerald-200 border border-emerald-700/50'
+                      )}>
+                        {isAudio ? (
+                          <>
+                            <Headphones className="h-2.5 w-2.5" /> Audio Drive
+                          </>
+                        ) : (
+                          <>
+                            <CirclePlay className="h-2.5 w-2.5" /> {isYt ? 'Video YouTube' : 'Video Kajian'}
+                          </>
+                        )}
                       </span>
 
                       {/* Top-right: Status Badge */}
@@ -7906,7 +8027,10 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
 };
 
 const youtubeVideoId = (url: string) => {
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&/]+)/i);
+  if (!url) return '';
+  const trimmed = url.trim();
+  const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/|live\/))([a-zA-Z0-9_-]{11})/i)
+    || trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&/]+)/i);
   return match?.[1] || '';
 };
 
@@ -8308,7 +8432,7 @@ const CertificateModal = ({
 export const getGoogleDriveEmbedUrl = (url?: string | null): string | null => {
   if (!url) return null;
   const trimmed = url.trim();
-  if (!trimmed.includes('drive.google.com')) return null;
+  if (!trimmed.includes('drive.google.com') && !trimmed.includes('docs.google.com')) return null;
   const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (fileMatch && fileMatch[1]) {
     return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
