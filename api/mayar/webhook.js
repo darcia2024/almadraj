@@ -72,10 +72,13 @@ export default async function handler(req, res) {
   if (!requestIsAuthorized(req)) return res.status(401).json({ message: 'Invalid webhook secret' });
 
   const payload = req.body || {};
-  if (!['payment.received', 'payment.reminder'].includes(payload.event)) return res.status(200).json({ received: true, processed: false });
-  const data = payload.data || {};
-  const providerCheckoutId = data.id;
-  const providerPaymentId = data.transactionId || data.transaction_id;
+  const event = String(payload.event || payload.type || '').toLowerCase();
+  const isPaidEvent = ['payment.received', 'payment.successful', 'invoice.paid', 'payment.success'].includes(event);
+  const isReminderEvent = ['payment.reminder', 'invoice.reminder'].includes(event);
+  if (!isPaidEvent && !isReminderEvent) return res.status(200).json({ received: true, processed: false, note: 'Unhandled event: ' + event });
+  const data = payload.data || payload;
+  const providerCheckoutId = data.id || data.paymentId || data.payment_id;
+  const providerPaymentId = data.transactionId || data.transaction_id || data.id;
   if (!providerCheckoutId && !providerPaymentId) return res.status(400).json({ message: 'Payment identifiers missing' });
 
   try {
@@ -84,11 +87,11 @@ export default async function handler(req, res) {
     if (!order) return res.status(202).json({ received: true, processed: false });
 
     const paidAmount = Number(data.amount ?? data.totalAmount ?? data.total_amount);
-    if (payload.event === 'payment.received' && Number.isFinite(paidAmount) && paidAmount !== Number(order.amount)) {
+    if (isPaidEvent && Number.isFinite(paidAmount) && paidAmount !== Number(order.amount)) {
       return res.status(422).json({ message: 'Payment amount does not match the order' });
     }
 
-    if (payload.event === 'payment.reminder') {
+    if (isReminderEvent) {
       await supabaseFetch('notifications', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ user_id: order.user_id, type: 'payment_reminder', title: 'Pembayaran belum selesai', body: 'Selesaikan pembayaran kelas ' + (order.courses?.title || 'Al Madraj') + ' sebelum tautan berakhir.', order_id: order.id }) });
       return res.status(200).json({ received: true, processed: true });
     }

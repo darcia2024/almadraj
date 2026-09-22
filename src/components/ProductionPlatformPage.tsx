@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, Bell, Bookmark, BookOpen, CalendarDays, Camera, Check,
-  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, CreditCard, Download, Eye, FileCheck, FileText,
+  CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock, Compass, Copy, CreditCard, Download, Eye, FileCheck, FileText,
   Flame, GraduationCap, Headphones, ImageIcon, LayoutDashboard, Lock, LockKeyhole, LogOut, Maximize, Menu,
   MessageCircle, Minimize, MoreHorizontal, Music, Pause, Pencil, Play, Plus, Printer, RefreshCw, RotateCcw,
   RotateCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Target, Trash2,
@@ -31,6 +31,7 @@ type Course = {
   pj_email?: string;
   media_format?: 'video' | 'audio' | 'hybrid';
   modul_url?: string;
+  mayar_url?: string;
   has_certificate?: boolean;
 };
 type Lesson = {
@@ -3364,6 +3365,12 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
     onError('');
     setMayarError(null);
     try {
+      if (course.mayar_url && course.mayar_url.startsWith('http')) {
+        window.open(course.mayar_url, '_blank', 'noopener,noreferrer');
+        setSubmitting(false);
+        return;
+      }
+
       const sb = requireSupabase();
       const order = await sb.rpc('create_lms_order', { p_course_slug: course.slug });
       if (order.error) throw new Error(order.error.message);
@@ -3376,11 +3383,14 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
           'Content-Type': 'application/json',
           Authorization: 'Bearer ' + (sessionData.session?.access_token || '')
         },
-        body: JSON.stringify({ orderId: order.data.id })
+        body: JSON.stringify({
+          orderId: order.data.id,
+          mobile: currentProfile?.whatsapp || ''
+        })
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.checkoutUrl) {
-        throw new Error(result.message || 'Payment gateway Mayar sedang tahap verifikasi.');
+        throw new Error(result.message || 'Payment gateway Mayar sedang dalam tahap penyiapan.');
       }
       window.location.assign(result.checkoutUrl);
     } catch (submitError: any) {
@@ -3525,28 +3535,46 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
                 </button>
               </div>
 
-              {/* Secondary Option: Mayar Payment Gateway Notice */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs leading-relaxed text-[#a0baae]">
-                <div className="flex items-center justify-between text-[#83c5be] font-semibold mb-1">
-                  <span>Pembayaran Otomatis (Mayar)</span>
-                  <span className="text-[10px] rounded bg-amber-400/20 text-amber-300 px-1.5 py-0.5">Tahap Verifikasi</span>
+              {/* Automated Option: Mayar Payment Gateway */}
+              <div className="rounded-xl border border-emerald-500/30 bg-white/[0.04] p-4 text-xs leading-relaxed text-[#c2dcd0]">
+                <div className="flex items-center justify-between text-[#83c5be] font-bold mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <CreditCard className="h-4 w-4 text-[#83c5be]" />
+                    <span>Pembayaran Otomatis Mayar.id</span>
+                  </span>
+                  <span className="text-[10px] rounded-full bg-emerald-400/20 text-emerald-300 font-bold px-2 py-0.5">
+                    Instan &amp; Otomatis
+                  </span>
                 </div>
-                <p>
-                  Gateway pembayaran instan (QRIS, VA, E-Wallet) sedang dalam integrasi final. Jika tombol di bawah belum dapat memproses, silakan gunakan konfirmasi WhatsApp di atas.
+                <p className="text-[11.5px] text-[#a0baae]">
+                  Bayar instan via <strong>QRIS (Semua Bank &amp; E-Wallet)</strong>, <strong>Virtual Account (BSI, BCA, Mandiri, BRI, BNI)</strong>, atau E-Wallet. Akses kelas langsung aktif otomatis setelah pembayaran terverifikasi.
                 </p>
+
+                {/* Method Badges */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[#83c5be]">
+                  <span className="rounded bg-black/30 border border-white/10 px-2 py-0.5 font-bold">QRIS</span>
+                  <span className="rounded bg-black/30 border border-white/10 px-2 py-0.5">BSI VA</span>
+                  <span className="rounded bg-black/30 border border-white/10 px-2 py-0.5">BCA VA</span>
+                  <span className="rounded bg-black/30 border border-white/10 px-2 py-0.5">Mandiri VA</span>
+                  <span className="rounded bg-black/30 border border-white/10 px-2 py-0.5">GoPay / OVO</span>
+                </div>
+
                 {mayarError && (
-                  <p className="mt-2 text-amber-300 font-medium">
-                    ⚠️ {mayarError} (Gunakan WhatsApp di atas)
-                  </p>
+                  <div className="mt-2.5 rounded-lg bg-amber-500/15 border border-amber-400/30 p-2.5 text-amber-200 text-xs">
+                    <p className="font-semibold">⚠️ {mayarError}</p>
+                    <p className="mt-0.5 text-[11px] text-amber-300/80">Silakan gunakan tombol WhatsApp di atas untuk aktivasi langsung via admin.</p>
+                  </div>
                 )}
+
                 <button
                   type="button"
                   disabled={submitting}
                   onClick={handleMayarCheckout}
-                  className="mt-3 flex min-h-9 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 text-xs font-semibold text-white hover:bg-white/10 active:scale-95 transition cursor-pointer"
+                  className="mt-3.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#006d77] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#00545c] active:scale-95 transition cursor-pointer"
                 >
-                  <CreditCard className="h-3.5 w-3.5 text-[#83c5be]" />
-                  <span>{submitting ? 'Menghubungkan ke Mayar...' : 'Coba Bayar Otomatis Mayar'}</span>
+                  <CreditCard className="h-4 w-4 text-[#83c5be]" />
+                  <span>{submitting ? 'Menghubungkan ke Mayar...' : 'Bayar via Mayar (QRIS / VA / E-Wallet)'}</span>
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -4662,7 +4690,7 @@ type ProductionAdminOrder = { id: string; amount: number; status: string; provid
 type ProductionAdminProgress = LessonProgress & { user_id: string };
 
 const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: string) => void; user?: { id: string; email?: string } | null; profile?: Profile | null }) => {
-  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions';
+  type Tab = 'overview' | 'curriculum' | 'coordinators' | 'participants' | 'transactions' | 'gateway';
   type CourseModalTab = 'identity' | 'media' | 'coordinator';
 
   type CourseDraft = {
@@ -4682,6 +4710,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     pj_email?: string;
     media_format?: 'video' | 'audio' | 'hybrid';
     modul_url?: string;
+    mayar_url?: string;
     has_certificate?: boolean;
   };
 
@@ -4720,6 +4749,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'admin' | 'student'>('all');
   const [accessView, setAccessView] = useState<'users' | 'enrollments'>('users');
   const [orderSearch, setOrderSearch] = useState('');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -4882,6 +4912,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       pj_email: course.pj_email || '',
       media_format: isDars ? 'video' : (course.media_format || 'audio'),
       modul_url: course.modul_url || '',
+      mayar_url: course.mayar_url || '',
       has_certificate: course.has_certificate ?? true,
     } : {
       slug: '',
@@ -4899,6 +4930,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       pj_email: '',
       media_format: 'video',
       modul_url: '',
+      mayar_url: '',
       has_certificate: true,
     });
   };
@@ -4964,6 +4996,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         pj_email: courseDraft.pj_email?.trim() || '',
         media_format: finalMediaFormat,
         modul_url: courseDraft.modul_url?.trim() || '',
+        mayar_url: courseDraft.mayar_url?.trim() || '',
         has_certificate: courseDraft.has_certificate ?? true,
         updated_at: new Date().toISOString(),
       };
@@ -5163,6 +5196,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           { id: 'coordinators' as const, label: 'Penugasan PJ', icon: UsersRound, count: `${courses.filter((c) => Boolean(c.pj_email || c.pj_name)).length}/${courses.length}` },
           { id: 'participants' as const, label: 'Peserta & Akses', icon: GraduationCap, count: profiles.length },
           { id: 'transactions' as const, label: 'Transaksi & Keuangan', icon: CreditCard, count: orders.length },
+          { id: 'gateway' as const, label: 'Integrasi Mayar', icon: ShieldCheck, count: 'Mayar.id' },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = tab === item.id;
@@ -6120,6 +6154,177 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
               </div>
             </div>
           )}
+
+          {/* ========================================================================= */}
+          {/* TAB 6: INTEGRASI PAYMENT GATEWAY (MAYAR.ID)                                */}
+          {/* ========================================================================= */}
+          {tab === 'gateway' && (() => {
+            const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://almadraj-edu.com';
+            const webhookUrl = `${originUrl}/api/mayar/webhook?secret=almadraj_mayar_secret_key`;
+
+            const handleCopyWebhook = () => {
+              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                navigator.clipboard.writeText(webhookUrl);
+                setCopiedWebhook(true);
+                setTimeout(() => setCopiedWebhook(false), 2500);
+              }
+            };
+
+            const mayarOrders = orders.filter((o) => o.provider === 'mayar' || o.provider === 'manual' || !o.provider);
+
+            return (
+              <div className="space-y-6">
+                {/* Header Card */}
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-2xs">
+                      <ShieldCheck className="h-6 w-6" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base sm:text-lg font-bold text-[#112d22]">
+                          Integrasi Payment Gateway Mayar.id
+                        </h2>
+                        <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
+                          Sistem Siap
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#446252] mt-1 max-w-2xl leading-relaxed">
+                        Mayar.id mendukung pembayaran otomatis via <strong>QRIS (BCA, Mandiri, BSI, GoPay, OVO, ShopeePay, DANA)</strong> serta <strong>Virtual Account (BSI, BCA, Mandiri, BRI, BNI)</strong> dengan aktivasi kelas instan 24/7.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://dashboard.mayar.id"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] transition"
+                  >
+                    <span>Buka Dashboard Mayar</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+
+                {/* Webhook URL Box */}
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-[#112d22]">
+                        1. Webhook URL Al Madraj untuk Mayar
+                      </h3>
+                      <p className="text-xs text-[#6c8577] mt-0.5">
+                        Salin URL ini dan tempelkan pada menu <strong>Integrasi &gt; Webhook</strong> di Dashboard Mayar Anda.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyWebhook}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition cursor-pointer self-start sm:self-auto"
+                    >
+                      {copiedWebhook ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copiedWebhook ? 'Tersalin ke Clipboard!' : 'Salin Webhook URL'}</span>
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border border-[#dce9df] bg-[#f9fbfa] p-3.5 font-mono text-xs text-[#112d22] break-all select-all flex items-center justify-between gap-3">
+                    <code>{webhookUrl}</code>
+                  </div>
+
+                  <div className="text-xs text-[#6c8577] space-y-1">
+                    <p>⚡ <strong>Event Webhook yang diproses:</strong> <code>payment.received</code> (mengaktifkan akses kelas santri secara instan) dan <code>payment.reminder</code> (notifikasi pengingat).</p>
+                  </div>
+                </div>
+
+                {/* Environment Variables Reference Box */}
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs space-y-4">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-[#112d22]">
+                      2. Konfigurasi Environment Variables (Vercel / Server Hosting)
+                    </h3>
+                    <p className="text-xs text-[#6c8577] mt-0.5">
+                      Tambahkan kunci berikut pada <strong>Settings &gt; Environment Variables</strong> di project Vercel Anda:
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
+                      <p className="font-mono text-xs font-bold text-[#006d77]">MAYAR_API_KEY</p>
+                      <p className="text-[11px] text-[#6c8577]">API Key resmi dari akun Mayar Anda (Production / Sandbox).</p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
+                      <p className="font-mono text-xs font-bold text-[#006d77]">MAYAR_WEBHOOK_SECRET</p>
+                      <p className="text-[11px] text-[#6c8577]">Secret verifikasi signature webhook (samakan dengan secret di URL webhook).</p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
+                      <p className="font-mono text-xs font-bold text-[#006d77]">SUPABASE_SECRET_KEY</p>
+                      <p className="text-[11px] text-[#6c8577]">Service role secret Supabase untuk memvalidasi pembayaran di database.</p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
+                      <p className="font-mono text-xs font-bold text-[#006d77]">APP_URL</p>
+                      <p className="text-[11px] text-[#6c8577]">Domain website Al Madraj (contoh: <code>{originUrl}</code>).</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step-by-Step Checklist */}
+                <div className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs space-y-4">
+                  <h3 className="text-sm sm:text-base font-bold text-[#112d22]">
+                    3. Langkah Mudah Aktivasi Pembayaran Mayar.id
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 text-white font-bold text-xs">1</span>
+                      <p className="text-xs font-bold text-[#112d22]">Daftar Akun Mayar</p>
+                      <p className="text-[11px] text-[#6c8577] leading-relaxed">
+                        Daftar akun di <a href="https://mayar.id" target="_blank" rel="noreferrer" className="text-[#006d77] underline">mayar.id</a> dan lengkapi verifikasi identitas (KTP/NPWP).
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 text-white font-bold text-xs">2</span>
+                      <p className="text-xs font-bold text-[#112d22]">Salin API Key</p>
+                      <p className="text-[11px] text-[#6c8577] leading-relaxed">
+                        Buka menu Integrasi / API Keys di Mayar, lalu salin API Key ke environment variable Vercel.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 text-white font-bold text-xs">3</span>
+                      <p className="text-xs font-bold text-[#112d22]">Pasang Webhook URL</p>
+                      <p className="text-[11px] text-[#6c8577] leading-relaxed">
+                        Tempelkan Webhook URL Al Madraj di atas ke dashboard Mayar dan centang event payment.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 text-white font-bold text-xs">4</span>
+                      <p className="text-xs font-bold text-[#112d22]">Uji Coba Transaksi</p>
+                      <p className="text-[11px] text-[#6c8577] leading-relaxed">
+                        Lakukan test checkout QRIS / Virtual Account simulasi untuk memastikan kelas aktif instan.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Mayar Link Option (No-code / Fast Alternative) */}
+                <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-5 shadow-xs space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-cyan-700" />
+                    <h3 className="text-xs sm:text-sm font-bold text-cyan-950">
+                      Opsi Alternatif: Direct Mayar Payment Link (Tanpa Kode)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-cyan-900 leading-relaxed">
+                    Selain API otomatis, Anda juga bisa membuat <strong>Payment Link</strong> langsung di Dashboard Mayar (misalnya <code>https://mayar.link/p/maddah-al-azhar</code>), lalu memasukkan link tersebut di tab <strong>Media &amp; Diktat</strong> saat mengedit kelas. Santri yang mengklik Bayar via Mayar akan langsung diarahkan ke halaman pembayaran Mayar tersebut.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -6309,6 +6514,16 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   />
                   <p className="text-[11px] text-gray-500">
                     Santri dapat mendownload diktat modul PDF ini langsung dari tab Modul di ruang belajar.
+                  </p>
+
+                  <ProductionAdminField
+                    label="Link Pembayaran Mayar.id (Opsional / Direct Payment Link)"
+                    value={courseDraft.mayar_url || ''}
+                    onChange={(value) => setCourseDraft({ ...courseDraft, mayar_url: value })}
+                    placeholder="https://mayar.link/p/... (Opsional jika memakai direct payment link)"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    Jika diisi, santri yang memilih checkout Mayar dapat langsung diarahkan ke link produk Mayar ini.
                   </p>
 
                   <div className="rounded-xl border border-[#dce9df] bg-[#f9fbfa] p-4 space-y-3">
