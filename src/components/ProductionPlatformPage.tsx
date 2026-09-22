@@ -3431,7 +3431,18 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
         {course.summary && <p className="mt-3 text-sm leading-relaxed text-[#607568]">{course.summary}</p>}
 
         <div className="mt-6 border-t border-[#e1eee4] pt-5 space-y-3">
-          <Summary label="Format Pembelajaran" value={course.media_format === 'audio' ? '🎧 Audio Bimbel & Foto Saburah' : course.media_format === 'hybrid' ? '🎧 Audio + 🎬 Video' : '🎬 Video Dars & Bahasan'} />
+          <Summary
+            label="Format Pembelajaran"
+            value={
+              (course.program_type || 'Dars') === 'Dars'
+                ? '🎬 Video Dars & Bahasan'
+                : course.media_format === 'audio'
+                ? '🎧 Audio Bimbel & Foto Saburah'
+                : course.media_format === 'hybrid'
+                ? '🎧 Audio + 🎬 Video'
+                : '🎬 Video Bimbel'
+            }
+          />
           <Summary label="Fakultas / Maddah" value={course.faculty || 'Al-Azhar'} />
           <Summary label="Pengampu / Tutor" value={course.tutor || 'Asatidz Al Madraj'} />
           {course.pj_name && <Summary label="Koordinator Maddah (PJ)" value={`${course.pj_name} (${course.pj_contact || 'WhatsApp'})`} />}
@@ -4764,12 +4775,23 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       const firstError = [courseResult, lessonResult, profileResult, enrollmentResult, orderResult, progressResult].find((result) => result.error)?.error;
       if (firstError) throw new Error(firstError.message);
 
-      const nextCourses = (courseResult.data || []) as ProductionAdminCourse[];
+      const nextCourses = ((courseResult.data || []) as ProductionAdminCourse[]).map((c) => ({
+        ...c,
+        program_type: c.program_type || 'Dars',
+        media_format: (c.program_type || 'Dars') === 'Dars' ? 'video' : (c.media_format || 'audio'),
+      }));
       setCourses(nextCourses);
       if (nextCourses.length && (!selectedCourseId || !nextCourses.some((c) => c.id === selectedCourseId))) {
         setSelectedCourseId(nextCourses[0].id);
       }
       setLessons((lessonResult.data || []) as ProductionAdminLesson[]);
+
+      // Background sync: Ensure all Dars courses in DB are marked as video
+      const rawCourses = (courseResult.data || []) as ProductionAdminCourse[];
+      const darsToFix = rawCourses.filter((c) => (c.program_type || 'Dars') === 'Dars' && c.media_format !== 'video');
+      if (darsToFix.length) {
+        sb.from('courses').update({ media_format: 'video' }).in('id', darsToFix.map((c) => c.id)).then(() => null, () => null);
+      }
 
       let loadedUsers: ProductionAdminProfile[] = [];
       try {
@@ -4841,11 +4863,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
   const startCourse = (course?: ProductionAdminCourse, initialModalTab: CourseModalTab = 'identity') => {
     setCourseModalTab(initialModalTab);
+    const initialType: ProgramType = course ? (course.program_type || 'Dars') : 'Dars';
+    const isDars = initialType === 'Dars';
     setCourseDraft(course ? {
       id: course.id,
       slug: course.slug,
       title: course.title,
-      program_type: course.program_type || 'Dars',
+      program_type: initialType,
       faculty: course.faculty,
       summary: course.summary,
       tutor: course.tutor,
@@ -4856,13 +4880,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       pj_name: course.pj_name || '',
       pj_contact: course.pj_contact || '',
       pj_email: course.pj_email || '',
-      media_format: course.media_format || (course.program_type === 'Bimbel' ? 'audio' : 'video'),
+      media_format: isDars ? 'video' : (course.media_format || 'audio'),
       modul_url: course.modul_url || '',
       has_certificate: course.has_certificate ?? true,
     } : {
       slug: '',
       title: '',
-      program_type: 'Bimbel',
+      program_type: 'Dars',
       faculty: 'Syariah',
       summary: '',
       tutor: '',
@@ -4873,7 +4897,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       pj_name: '',
       pj_contact: '',
       pj_email: '',
-      media_format: 'audio',
+      media_format: 'video',
       modul_url: '',
       has_certificate: true,
     });
@@ -4881,6 +4905,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
   const startLesson = (lesson?: ProductionAdminLesson, targetCourseId?: string) => {
     const activeCid = targetCourseId || selectedCourseId || (courses[0]?.id || '');
+    const targetCourse = courses.find((c) => c.id === activeCid);
+    const isDarsCourse = (targetCourse?.program_type || 'Dars') === 'Dars';
     setContentFile(null);
     setLessonDraft(lesson ? {
       id: lesson.id,
@@ -4896,7 +4922,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     } : {
       course_id: activeCid,
       title: '',
-      content_type: 'audio',
+      content_type: isDarsCourse ? 'video' : 'audio',
       duration: '',
       content_url: '',
       sort_order: String(lessons.filter((item) => item.course_id === activeCid).length + 1),
@@ -4919,10 +4945,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     }
     setSaving(true);
     try {
+      const finalProgramType = courseDraft.program_type || 'Dars';
+      const finalMediaFormat = finalProgramType === 'Dars' ? 'video' : (courseDraft.media_format || 'audio');
+
       const fullPayload = {
         slug: normalizedSlug,
         title: courseDraft.title.trim(),
-        program_type: courseDraft.program_type || 'Dars',
+        program_type: finalProgramType,
         faculty: courseDraft.faculty.trim(),
         summary: courseDraft.summary.trim(),
         tutor: courseDraft.tutor.trim(),
@@ -4933,7 +4962,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         pj_name: courseDraft.pj_name?.trim() || '',
         pj_contact: courseDraft.pj_contact?.trim() || '',
         pj_email: courseDraft.pj_email?.trim() || '',
-        media_format: courseDraft.media_format || (courseDraft.program_type === 'Bimbel' ? 'audio' : 'video'),
+        media_format: finalMediaFormat,
         modul_url: courseDraft.modul_url?.trim() || '',
         has_certificate: courseDraft.has_certificate ?? true,
         updated_at: new Date().toISOString(),
@@ -4992,10 +5021,14 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const parentCourse = courses.find((c) => c.id === lessonDraft.course_id);
+      const isDarsCourse = (parentCourse?.program_type || 'Dars') === 'Dars';
+      const finalContentType = isDarsCourse && lessonDraft.content_type === 'audio' ? 'video' : lessonDraft.content_type;
+
       const fullPayload = {
         course_id: lessonDraft.course_id,
         title: lessonDraft.title.trim(),
-        content_type: lessonDraft.content_type,
+        content_type: finalContentType,
         duration: lessonDraft.duration.trim(),
         content_url: contentUrl,
         sort_order: sortOrder,
@@ -5012,7 +5045,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         const basePayload = {
           course_id: lessonDraft.course_id,
           title: lessonDraft.title.trim(),
-          content_type: lessonDraft.content_type,
+          content_type: finalContentType,
           duration: lessonDraft.duration.trim(),
           content_url: contentUrl,
           sort_order: sortOrder,
@@ -5499,8 +5532,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                             <span className="rounded-full bg-[#006d77] px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
                               {selectedCourse.program_type || 'Dars'}
                             </span>
-                            <span className="rounded-full bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[10px] font-bold text-cyan-800 uppercase">
-                              Format: {selectedCourse.media_format || 'audio'}
+                            <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ' + ((selectedCourse.program_type || 'Dars') === 'Dars' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : (selectedCourse.media_format || 'audio') === 'audio' ? 'bg-cyan-50 border border-cyan-200 text-cyan-800' : 'bg-blue-50 border border-blue-200 text-blue-800')}>
+                              {(selectedCourse.program_type || 'Dars') === 'Dars' ? '🎬 Format: Video Dars' : (selectedCourse.media_format || 'audio') === 'audio' ? '🎙️ Format: Audio Bimbel' : '🎬 Format: Video Bimbel'}
                             </span>
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${selectedCourse.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'}`}>
                               {selectedCourse.is_published ? '✓ Published' : 'Draft'}
@@ -5728,7 +5761,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   const hasPj = Boolean(c.pj_email || c.pj_name);
                   const cleanMail = (c.pj_email || '').toLowerCase().trim();
                   const matchedUser = registeredUsers.find((u) => (u.email || '').toLowerCase().trim() === cleanMail);
-                  const isAudio = (c.media_format || (c.program_type === 'Bimbel' ? 'audio' : 'video')) === 'audio';
+                  const isDars = (c.program_type || 'Dars') === 'Dars';
+                  const isAudio = !isDars && (c.media_format || 'audio') === 'audio';
 
                   return (
                     <div
@@ -5739,10 +5773,10 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                         {/* Course identity */}
                         <div className="flex items-start justify-between gap-2">
                           <span className="rounded-full bg-[#006d77] px-2.5 py-0.5 text-[9px] font-bold text-white uppercase">
-                            {c.program_type || 'Bimbel'}
+                            {c.program_type || (isDars ? 'Dars' : 'Bimbel')}
                           </span>
-                          <span className={'rounded-full px-2 py-0.5 text-[9px] font-bold ' + (isAudio ? 'bg-cyan-50 text-cyan-800 border border-cyan-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200')}>
-                            {isAudio ? '🎙️ Audio Bimbel' : '🎬 Video Dars'}
+                          <span className={'rounded-full px-2 py-0.5 text-[9px] font-bold ' + (isDars ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : isAudio ? 'bg-cyan-50 text-cyan-800 border border-cyan-200' : 'bg-blue-50 text-blue-800 border border-blue-200')}>
+                            {isDars ? '🎬 Video Dars' : isAudio ? '🎙️ Audio Bimbel' : '🎬 Video Bimbel'}
                           </span>
                         </div>
 
@@ -6138,7 +6172,14 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                     <ProductionAdminSelect
                       label="Jenis Program"
                       value={courseDraft.program_type}
-                      onChange={(value) => setCourseDraft({ ...courseDraft, program_type: value as ProgramType })}
+                      onChange={(value) => {
+                        const pt = value as ProgramType;
+                        setCourseDraft({
+                          ...courseDraft,
+                          program_type: pt,
+                          media_format: pt === 'Dars' ? 'video' : (courseDraft.media_format || 'audio'),
+                        });
+                      }}
                       options={['Bimbel', 'Dars']}
                     />
                   </div>
@@ -6183,12 +6224,21 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
               {courseModalTab === 'media' && (
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <ProductionAdminSelect
-                      label="Format Media Pembelajaran"
-                      value={courseDraft.media_format || 'audio'}
-                      onChange={(value) => setCourseDraft({ ...courseDraft, media_format: value as any })}
-                      options={['audio', 'video', 'hybrid']}
-                    />
+                    {courseDraft.program_type === 'Dars' ? (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex flex-col justify-center">
+                        <span className="block text-xs font-bold text-emerald-900">Format Media Pembelajaran</span>
+                        <p className="mt-1 text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+                          <span>🎬</span> <strong>Khusus Video Dars</strong> (Program Dars paten berformat Video)
+                        </p>
+                      </div>
+                    ) : (
+                      <ProductionAdminSelect
+                        label="Format Media Pembelajaran"
+                        value={courseDraft.media_format || 'audio'}
+                        onChange={(value) => setCourseDraft({ ...courseDraft, media_format: value as any })}
+                        options={['audio', 'video', 'hybrid']}
+                      />
+                    )}
                     <ProductionAdminField
                       label="Harga Pendaftaran (Rp)"
                       type="number"
@@ -6410,7 +6460,16 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   <span className="mb-1.5 block text-xs font-bold text-[#112d22]">Pilih Kelas / Maddah</span>
                   <select
                     value={lessonDraft.course_id}
-                    onChange={(e) => setLessonDraft({ ...lessonDraft, course_id: e.target.value })}
+                    onChange={(e) => {
+                      const newCid = e.target.value;
+                      const parentC = courses.find((c) => c.id === newCid);
+                      const isDars = (parentC?.program_type || 'Dars') === 'Dars';
+                      setLessonDraft({
+                        ...lessonDraft,
+                        course_id: newCid,
+                        content_type: isDars && lessonDraft.content_type === 'audio' ? 'video' : lessonDraft.content_type,
+                      });
+                    }}
                     className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-xs sm:text-sm font-medium"
                   >
                     {courses.map((course) => (
@@ -6423,19 +6482,38 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-[#112d22]">Tipe Materi</span>
-                  <select
-                    value={lessonDraft.content_type}
-                    onChange={(e) => setLessonDraft({ ...lessonDraft, content_type: e.target.value as Lesson['content_type'] })}
-                    className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-xs sm:text-sm font-medium"
-                  >
-                    <option value="audio">🎙️ Audio (Bimbel Talaqqi)</option>
-                    <option value="video">🎬 Video (Kajian Syarah)</option>
-                    <option value="pdf">📚 PDF (Diktat / Modul)</option>
-                    <option value="text">📝 Teks</option>
-                  </select>
-                </label>
+                {(() => {
+                  const parentC = courses.find((c) => c.id === lessonDraft.course_id);
+                  const isDarsCourse = (parentC?.program_type || 'Dars') === 'Dars';
+
+                  return (
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-bold text-[#112d22]">
+                        Tipe Materi {isDarsCourse && <span className="text-[#006d77] font-semibold">(Program Dars: Video)</span>}
+                      </span>
+                      <select
+                        value={isDarsCourse && lessonDraft.content_type === 'audio' ? 'video' : lessonDraft.content_type}
+                        onChange={(e) => setLessonDraft({ ...lessonDraft, content_type: e.target.value as Lesson['content_type'] })}
+                        className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 text-xs sm:text-sm font-medium"
+                      >
+                        {isDarsCourse ? (
+                          <>
+                            <option value="video">🎬 Video (Kajian Dars Al Madraj)</option>
+                            <option value="pdf">📚 PDF (Diktat / Modul Kitab)</option>
+                            <option value="text">📝 Teks</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="audio">🎙️ Audio (Bimbel Talaqqi)</option>
+                            <option value="video">🎬 Video (Bimbel)</option>
+                            <option value="pdf">📚 PDF (Modul Bimbel)</option>
+                            <option value="text">📝 Teks</option>
+                          </>
+                        )}
+                      </select>
+                    </label>
+                  );
+                })()}
                 <ProductionAdminField
                   label="Durasi Pertemuan"
                   value={lessonDraft.duration}
