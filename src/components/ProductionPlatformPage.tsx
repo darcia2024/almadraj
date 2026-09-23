@@ -10,6 +10,7 @@ import {
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
 import { MayarPaymentModal } from './MayarPaymentModal';
+import { InstallAppButton } from '../pwa/PwaLayer';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 import {
   TestimonialItem,
@@ -377,10 +378,17 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [shellProfile, setShellProfile] = useState(profile);
   const currentPath = window.location.pathname;
+  // Bilah tab bawah hanya di halaman utama; halaman detail punya tombol aksi bawahnya sendiri.
+  const showBottomNav = BOTTOM_NAV_PATHS.includes(currentPath);
 
   useEffect(() => {
     if (profile) setShellProfile(profile);
   }, [profile]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-bottom-nav', showBottomNav);
+    return () => document.documentElement.classList.remove('has-bottom-nav');
+  }, [showBottomNav]);
 
   const effectiveProfile: Profile = shellProfile || {
     id: '',
@@ -407,8 +415,8 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
 
   return (
     <div className="platform-compact min-h-[100dvh] w-full max-w-full bg-white text-[#17231b]">
-      <header className="fixed top-0 left-0 right-0 z-50 h-[64px] border-b border-[#dce9df] bg-white/95 backdrop-blur shadow-xs">
-        <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <header className="app-safe-top fixed top-0 left-0 right-0 z-50 h-[calc(64px+env(safe-area-inset-top))] border-b border-[#dce9df] bg-white/95 backdrop-blur shadow-xs">
+        <div className="mx-auto flex h-[64px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -475,7 +483,7 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
               onClick={onLogout}
               aria-label="Keluar"
               title="Keluar"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:border-[#b36d4c] hover:text-[#b36d4c] transition cursor-pointer"
+              className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568] hover:border-[#b36d4c] hover:text-[#b36d4c] transition cursor-pointer sm:flex"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -495,18 +503,19 @@ const BackendShell = ({ profile, onNavigate, onLogout, onProfileSaved, children 
           type="button"
           onClick={toggleSidebar}
           aria-label="Tutup sidebar"
-          className="fixed inset-0 top-[64px] z-30 bg-[#102c22]/20 lg:hidden"
+          className="fixed inset-0 top-[calc(64px+env(safe-area-inset-top))] z-[36] bg-[#102c22]/20 backdrop-blur-[1px] lg:hidden"
         />
       )}
       <div
-        className={`w-full min-w-0 pt-[64px] transition-[padding] duration-200 ${
+        className={`w-full min-w-0 pt-[calc(64px+env(safe-area-inset-top))] transition-[padding] duration-200 ${
           sidebarVisible ? 'lg:pl-[224px]' : 'lg:pl-0'
         }`}
       >
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pb-16 pt-6 sm:pt-8 min-w-0">
+        <div className={'mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 min-w-0 ' + (showBottomNav ? 'pb-[calc(96px+env(safe-area-inset-bottom))] lg:pb-16' : 'pb-16')}>
           <main className="w-full min-w-0">{children}</main>
         </div>
       </div>
+      {showBottomNav && <AppBottomNav currentPath={currentPath} onNavigate={handleNavigate} />}
       {profileEditorOpen && (
         <ProfileQuickEdit
           profile={effectiveProfile}
@@ -4564,6 +4573,45 @@ const CatalogDetailModal = ({
 };
 
 
+const BOTTOM_NAV_PATHS = ['/dashboard', '/kelas', '/belajar', '/transaksi', '/pengaturan'];
+
+const BOTTOM_NAV_ITEMS: { path: string; label: string; icon: React.ElementType }[] = [
+  { path: '/dashboard', label: 'Beranda', icon: LayoutDashboard },
+  { path: '/kelas', label: 'Katalog', icon: Compass },
+  { path: '/belajar', label: 'Belajar', icon: CirclePlay },
+  { path: '/transaksi', label: 'Transaksi', icon: CreditCard },
+  { path: '/pengaturan', label: 'Akun', icon: UserRound },
+];
+
+const AppBottomNav = ({ currentPath, onNavigate }: { currentPath: string; onNavigate: (path: string) => void }) => (
+  <nav
+    aria-label="Navigasi utama"
+    className="app-bottom-nav fixed inset-x-0 bottom-0 z-[35] border-t border-[#dce9df] bg-white/92 shadow-[0_-8px_24px_rgba(16,44,34,0.06)] backdrop-blur-xl lg:hidden"
+  >
+    <ul className="mx-auto grid h-[68px] max-w-lg grid-cols-5 px-1.5">
+      {BOTTOM_NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+        const active = currentPath === path;
+        return (
+          <li key={path} className="flex">
+            <button
+              type="button"
+              onClick={() => { if (!active) onNavigate(path); }}
+              aria-current={active ? 'page' : undefined}
+              className="group flex flex-1 flex-col items-center justify-center gap-1 cursor-pointer"
+            >
+              <span className="relative grid h-8 w-14 place-items-center">
+                {active && <span className="app-tab-indicator absolute inset-0 rounded-full bg-[#83c5be]/55" aria-hidden="true" />}
+                <Icon className={'relative h-[19px] w-[19px] transition-colors ' + (active ? 'text-[#00424a]' : 'text-[#6b7d73] group-active:text-[#006d77]')} strokeWidth={active ? 2.3 : 1.9} />
+              </span>
+              <span className={'text-[10.5px] leading-none tracking-wide ' + (active ? 'font-bold text-[#00424a]' : 'font-medium text-[#6b7d73]')}>{label}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  </nav>
+);
+
 const DashboardSidebarLink = ({ icon: Icon, label, active = false, onClick }: { icon: React.ElementType; label: string; active?: boolean; onClick: () => void }) => (
   <button
     onClick={onClick}
@@ -4580,7 +4628,7 @@ const DashboardSidebar = ({ profile, currentPath, open, onNavigate, onLogout, on
   const roleLabel = profile?.role === 'admin' ? 'Khadim Majelis (Admin)' : 'Mahasiswa Aktif Al-Azhar';
 
   return (
-    <aside className={'fixed left-0 top-[64px] z-40 h-[calc(100dvh-64px)] w-[min(84vw,280px)] border-r border-[#e2ece5] bg-[#fbfcfb] transition-transform duration-200 lg:w-[224px] ' + (open ? 'translate-x-0' : '-translate-x-full')}>
+    <aside className={'fixed left-0 top-[calc(64px+env(safe-area-inset-top))] z-40 h-[calc(100dvh-64px-env(safe-area-inset-top))] w-[min(84vw,280px)] border-r border-[#e2ece5] bg-[#fbfcfb] transition-transform duration-200 lg:w-[224px] ' + (open ? 'translate-x-0' : '-translate-x-full')}>
       <div className="flex h-full flex-col overflow-hidden px-3.5 py-5">
         {/* User Card */}
         <button
@@ -4619,11 +4667,12 @@ const DashboardSidebar = ({ profile, currentPath, open, onNavigate, onLogout, on
           <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-[#52605a]">Akun</p>
           <nav className="mt-2.5 grid gap-1" aria-label="Navigasi akun">
             <DashboardSidebarLink icon={Settings2} label="Pengaturan" active={currentPath === '/pengaturan'} onClick={() => onNavigate('/pengaturan')} />
+            <InstallAppButton className="flex min-h-12 w-full items-center gap-3.5 rounded-full px-4 text-left text-xs font-semibold tracking-wide text-[#006d77] transition-all duration-200 hover:bg-[#e5f4f2] cursor-pointer" />
           </nav>
         </div>
 
         {/* Logout */}
-        <div className="mt-auto border-t border-[#bfc9c3]/40 px-2 pt-4">
+        <div className="mt-auto border-t border-[#bfc9c3]/40 px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
           <button onClick={onLogout} className="flex min-h-10 w-full items-center gap-2.5 rounded-full px-3 text-xs font-semibold text-[#52605a] hover:bg-[#ffdad6] hover:text-[#ba1a1a] transition cursor-pointer">
             <LogOut className="h-4 w-4" />
             <span>Keluar</span>
