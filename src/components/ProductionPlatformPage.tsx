@@ -11288,54 +11288,105 @@ const YouTubeRestrictedPlayer = ({
   progressHandler.current = onProgress;
   completeHandler.current = onComplete;
 
-  // Fullscreen toggle on container
-  const toggleFullscreen = async () => {
-    if (!containerRef.current) return;
+  // Layar penuh: pakai Fullscreen API bila tersedia (desktop, Android, iPad). iPhone tidak
+  // mengizinkan elemen selain <video> masuk fullscreen, jadi di sana (dan bila API ditolak)
+  // player dibentangkan memenuhi layar lewat CSS dan diputar ke landscape saat HP tegak.
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
+  const [isPortraitViewport, setIsPortraitViewport] = useState(false);
+
+  const nativeFullscreenElement = () => {
+    const doc = document as any;
+    return (doc.fullscreenElement || doc.webkitFullscreenElement || null) as Element | null;
+  };
+
+  const lockLandscape = () => {
+    const orientation = (screen as any).orientation;
+    if (orientation?.lock) orientation.lock('landscape').catch(() => undefined);
+  };
+
+  const unlockOrientation = () => {
+    const orientation = (screen as any).orientation;
+    try { orientation?.unlock?.(); } catch {}
+  };
+
+  const exitFullscreen = async () => {
+    if (isPseudoFullscreen) {
+      setIsPseudoFullscreen(false);
+      return;
+    }
+    const doc = document as any;
     try {
-      const doc = document as any;
-      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
-        const el = containerRef.current as any;
-        if (el.requestFullscreen) {
-          await el.requestFullscreen();
-        } else if (el.webkitRequestFullscreen) {
-          await el.webkitRequestFullscreen();
-        } else if (el.mozRequestFullScreen) {
-          await el.mozRequestFullScreen();
-        } else if (el.msRequestFullscreen) {
-          await el.msRequestFullscreen();
-        }
-      } else {
-        if (doc.exitFullscreen) {
-          await doc.exitFullscreen();
-        } else if (doc.webkitExitFullscreen) {
-          await doc.webkitExitFullscreen();
-        } else if (doc.mozCancelFullScreen) {
-          await doc.mozCancelFullScreen();
-        } else if (doc.msExitFullscreen) {
-          await doc.msExitFullscreen();
+      if (doc.exitFullscreen) await doc.exitFullscreen();
+      else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
+    } catch {}
+    unlockOrientation();
+  };
+
+  const toggleFullscreen = async () => {
+    const el = containerRef.current as any;
+    if (!el) return;
+    if (isFullscreen || isPseudoFullscreen) {
+      await exitFullscreen();
+      return;
+    }
+    try {
+      if (el.requestFullscreen) {
+        // Beberapa WebView/PWA membiarkan Promise ini menggantung tanpa hasil; jangan tunggu selamanya.
+        const outcome = await Promise.race([
+          el.requestFullscreen({ navigationUI: 'hide' }).then(() => 'ok'),
+          new Promise((resolve) => window.setTimeout(() => resolve('timeout'), 1200)),
+        ]);
+        if (outcome === 'ok' || nativeFullscreenElement()) {
+          lockLandscape();
+          return;
         }
       }
-    } catch (err) {
-      console.error('Fullscreen toggle failed:', err);
-    }
+      if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+        // Safari lama tidak mengembalikan Promise; cek sesaat kemudian apakah berhasil.
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
+        if (nativeFullscreenElement()) return;
+      }
+    } catch {}
+    setIsPseudoFullscreen(true);
   };
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const doc = document as any;
-      setIsFullscreen(Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement));
+      const active = Boolean(nativeFullscreenElement());
+      setIsFullscreen(active);
+      if (active) setIsPseudoFullscreen(false);
+      else unlockOrientation();
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
   }, []);
+
+  // Mode layar penuh CSS: kunci scroll halaman, sembunyikan navigasi aplikasi, ikuti orientasi layar.
+  useEffect(() => {
+    if (!isPseudoFullscreen) return;
+    const root = document.documentElement;
+    root.classList.add('player-pseudo-fullscreen');
+    const updateOrientation = () => setIsPortraitViewport(window.innerHeight > window.innerWidth);
+    updateOrientation();
+    lockLandscape();
+    const handleKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsPseudoFullscreen(false); };
+    window.addEventListener('resize', updateOrientation);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      root.classList.remove('player-pseudo-fullscreen');
+      window.removeEventListener('resize', updateOrientation);
+      window.removeEventListener('keydown', handleKey);
+      unlockOrientation();
+    };
+  }, [isPseudoFullscreen]);
+
+  const fullscreenActive = isFullscreen || isPseudoFullscreen;
+  const rotateToLandscape = isPseudoFullscreen && isPortraitViewport;
 
   // Auto-hide controls
   const triggerShowControls = () => {
@@ -11382,7 +11433,7 @@ const YouTubeRestrictedPlayer = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTime, duration, isPlaying, isReady]);
+  }, [currentTime, duration, isPlaying, isReady, isFullscreen, isPseudoFullscreen]);
 
   useEffect(() => {
     let disposed = false;
@@ -11510,9 +11561,16 @@ const YouTubeRestrictedPlayer = ({
       onMouseMove={triggerShowControls}
       onMouseEnter={triggerShowControls}
       onMouseLeave={handleMouseLeave}
-      className={`group relative h-full w-full overflow-hidden bg-black text-white select-none ${
-        isFullscreen ? 'fixed inset-0 z-50 h-screen w-screen' : ''
+      className={`group overflow-hidden bg-black text-white select-none ${
+        isPseudoFullscreen
+          ? 'fixed z-[300]'
+          : isFullscreen
+            ? 'fixed inset-0 z-50 h-screen w-screen'
+            : 'relative h-full w-full'
       }`}
+      style={isPseudoFullscreen ? (rotateToLandscape
+        ? { top: 0, left: '100vw', width: '100dvh', height: '100vw', transform: 'rotate(90deg)', transformOrigin: 'top left' }
+        : { inset: 0, width: '100vw', height: '100dvh' }) : undefined}
       data-restricted-youtube-player
     >
       {/* Underlying YouTube iframe */}
@@ -11665,11 +11723,11 @@ const YouTubeRestrictedPlayer = ({
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                aria-label={isFullscreen ? 'Keluar layar penuh (F)' : 'Layar penuh (F)'}
-                title={isFullscreen ? 'Keluar layar penuh (F)' : 'Layar penuh (F)'}
+                aria-label={fullscreenActive ? 'Keluar layar penuh (F)' : 'Layar penuh (F)'}
+                title={fullscreenActive ? 'Keluar layar penuh (F)' : 'Layar penuh (F)'}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20 active:scale-95 cursor-pointer"
               >
-                {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+                {fullscreenActive ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
               </button>
             </div>
           </div>

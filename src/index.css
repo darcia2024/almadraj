@@ -515,3 +515,14 @@ html.pwa-standalone :is(button, nav, [role="tab"]) {
   .text-white { color: #0f172a !important; }
   .print-break { page-break-after: always; break-after: page; }
 }
+
+/* Player video dalam mode layar penuh CSS (iPhone / saat Fullscreen API tidak tersedia). */
+html.player-pseudo-fullscreen,
+html.player-pseudo-fullscreen body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.player-pseudo-fullscreen :is(header, aside, .app-bottom-nav, .pwa-floating) {
+  visibility: hidden;
+}

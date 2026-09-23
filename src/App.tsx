@@ -131,6 +131,10 @@ export function App() {
       if (['input', 'textarea', 'select'].includes((e.target as HTMLElement)?.tagName?.toLowerCase())) {
         return;
       }
+      // Shortcut F/M/G/T milik mode proposal; jangan bentrok dengan player video di platform belajar.
+      if (viewMode !== 'presentation' && viewMode !== 'document') {
+        return;
+      }
 
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
         if (viewMode === 'presentation') {
