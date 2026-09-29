@@ -70,7 +70,7 @@ Buka dashboard hosting Vercel Anda di:
 | `MAYAR_WEBHOOK_SECRET` | `almadraj_mayar_secret_2026` | Kode rahasia yang sama dengan parameter `?secret=` pada Webhook |
 | `SUPABASE_SECRET_KEY` | `sb_secret_...` | Supabase Service Role Key (untuk update database enrollment) |
 | `APP_URL` | `https://almadraj.com` | URL domain publik website Al Madraj |
-| `MAYAR_API_URL` *(Opsional)* | `https://api.mayar.id/hl/v1/payment/create` | Default endpoint Mayar API |
+| `MAYAR_API_URL` *(Opsional)* | `https://api.mayar.id/hl/v2/invoices/create` | Default endpoint Mayar API (sandbox: `https://api.mayar.club/hl/v2/invoices/create`) |
 
 > **PENTING**: Setelah menambahkan atau mengubah Environment Variables di Vercel, lakukan **Redeploy** pada deployment terakhir agar variabel baru terbaca oleh Serverless Function.
 

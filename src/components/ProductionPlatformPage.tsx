@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
-import { MayarPaymentModal } from './MayarPaymentModal';
 import { InstallAppButton } from '../pwa/PwaLayer';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 import {
@@ -2435,7 +2434,9 @@ const CourseRouteV2 = ({
   const [previewLessons, setPreviewLessons] = useState<Lesson[]>([]);
   const [enrolled, setEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(wantsCheckout);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+  const checkoutAttempted = useRef(false);
   const [previewVideo, setPreviewVideo] = useState<{ id: string; title: string; youtubeId?: string } | null>(null);
 
   useEffect(() => {
@@ -2466,6 +2467,70 @@ const CourseRouteV2 = ({
     };
     load().catch(() => setLoading(false));
   }, [slug, user]);
+
+  const startMayarCheckout = async () => {
+    if (!course || checkoutLoading) return;
+
+    if (!user) {
+      const destination = `/kelas/${course.slug}?buy=1`;
+      onNavigate('/login?next=' + encodeURIComponent(destination));
+      return;
+    }
+
+    setCheckoutLoading(true);
+    setCheckoutError('');
+
+    try {
+      const sb = requireSupabase();
+      const orderResult = await sb.rpc('create_lms_order', { p_course_slug: course.slug });
+      if (orderResult.error) throw new Error(orderResult.error.message);
+      if (!orderResult.data?.id) throw new Error('Order pembayaran gagal dibuat.');
+
+      const { data: sessionData } = await sb.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        onNavigate('/login?next=' + encodeURIComponent(`/kelas/${course.slug}?buy=1`));
+        return;
+      }
+
+      const endpoint = import.meta.env.VITE_MAYAR_CHECKOUT_ENDPOINT || '/api/mayar/create-checkout';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          orderId: orderResult.data.id,
+          mobile: profile?.whatsapp || '',
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.checkoutUrl) {
+        throw new Error(result.message || 'Checkout Mayar belum tersedia pada server ini.');
+      }
+
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      checkoutAttempted.current = false;
+      setCheckoutError(error instanceof Error ? error.message : 'Gagal menghubungkan pembayaran Mayar.');
+      setCheckoutLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      loading ||
+      !wantsCheckout ||
+      !course ||
+      course.price <= 0 ||
+      enrolled ||
+      checkoutAttempted.current
+    ) return;
+
+    checkoutAttempted.current = true;
+    void startMayarCheckout();
+  }, [course, enrolled, loading, user, wantsCheckout]);
 
   if (loading) return <PublicLoading />;
   if (!course) {
@@ -2533,13 +2598,21 @@ const CourseRouteV2 = ({
       }
       onNavigate('/belajar/' + course.slug);
     } else {
-      setPaymentModalOpen(true);
+      void startMayarCheckout();
     }
   };
 
   return (
     <BackendShell profile={profile} onNavigate={onNavigate} onLogout={onLogout}>
       <div className="space-y-8 pb-20 lg:pb-12">
+        {checkoutError && (
+          <div role="alert" className="flex items-start justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p>{checkoutError}</p>
+            <button type="button" onClick={() => setCheckoutError('')} className="shrink-0 font-bold underline">
+              Tutup
+            </button>
+          </div>
+        )}
         {/* Breadcrumbs Navigation */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <button
@@ -2711,9 +2784,10 @@ const CourseRouteV2 = ({
               <button
                 type="button"
                 onClick={handleEnroll}
+                disabled={checkoutLoading}
                 className="inline-flex items-center gap-2 rounded-full bg-[#83c5be] px-5 py-3 text-xs font-bold text-[#00383d] shadow-lg hover:bg-white active:scale-95 transition-all cursor-pointer"
               >
-                <span>{hasAccess ? 'Buka Ruang Belajar' : isFree ? 'Mulai Belajar Sekarang' : 'Daftar Kelas Ini'}</span>
+                <span>{checkoutLoading ? 'Menghubungkan ke Mayar...' : hasAccess ? 'Buka Ruang Belajar' : isFree ? 'Mulai Belajar Sekarang' : 'Daftar Kelas Ini'}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -2813,7 +2887,7 @@ const CourseRouteV2 = ({
                                 } else if (hasAccess) {
                                   onNavigate(`/belajar/${course.slug}?lesson=${lesson.id || idx + 1}`);
                                 } else {
-                                  setPaymentModalOpen(true);
+                                  void startMayarCheckout();
                                 }
                               }}
                               className="relative h-18 w-28 sm:h-20 sm:w-32 rounded-[18px] overflow-hidden shrink-0 bg-[#00383d] shadow-2xs group-hover:shadow-md transition cursor-pointer"
@@ -2919,11 +2993,12 @@ const CourseRouteV2 = ({
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => setPaymentModalOpen(true)}
+                                onClick={() => void startMayarCheckout()}
+                                disabled={checkoutLoading}
                                 className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-full border border-[#d6e5dc] bg-[#f8faf9] px-4 py-2 text-xs font-semibold text-[#486354] hover:border-[#006d77] hover:text-[#006d77] hover:bg-[#eef6f2] active:scale-95 transition cursor-pointer"
                               >
                                 <Lock className="h-3.5 w-3.5 text-[#6c8577]" />
-                                <span>Terkunci · Buka Akses</span>
+                                <span>{checkoutLoading ? 'Menyiapkan checkout...' : 'Terkunci · Buka Akses'}</span>
                               </button>
                             )}
                           </div>
@@ -3140,10 +3215,11 @@ const CourseRouteV2 = ({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setPaymentModalOpen(true)}
+                      onClick={() => void startMayarCheckout()}
+                      disabled={checkoutLoading}
                       className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white shadow-[0_4px_16px_rgba(7,84,71,0.25)] hover:bg-[#096353] transition active:scale-95 cursor-pointer"
                     >
-                      <span>Daftar / Beli Sekarang</span>
+                      <span>{checkoutLoading ? 'Menghubungkan ke Mayar...' : 'Daftar / Beli Sekarang'}</span>
                       <CreditCard className="h-4 w-4" />
                     </button>
                   )}
@@ -3219,34 +3295,16 @@ const CourseRouteV2 = ({
             ) : (
               <button
                 type="button"
-                onClick={() => setPaymentModalOpen(true)}
+                onClick={() => void startMayarCheckout()}
+                disabled={checkoutLoading}
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#006d77] px-5 py-2.5 text-xs font-bold text-white shadow-md cursor-pointer"
               >
-                <span>Beli Sekarang</span>
+                <span>{checkoutLoading ? 'Menghubungkan...' : 'Beli Sekarang'}</span>
                 <CreditCard className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
         </div>
-
-        {paymentModalOpen && (
-          <MayarPaymentModal
-            course={{
-              id: course.slug,
-              title: course.title,
-              price: course.price,
-              faculty: course.faculty,
-              programType: course.program_type,
-              tutor: tutorName,
-              lessons: course.duration,
-            }}
-            onClose={() => setPaymentModalOpen(false)}
-            onSuccessRedirect={(slug) => {
-              setPaymentModalOpen(false);
-              onNavigate('/belajar/' + slug);
-            }}
-          />
-        )}
 
         {/* Video Preview Modal for Dars 1 */}
         {previewVideo && (
@@ -3640,7 +3698,6 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
   const [sortBy, setSortBy] = useState<'featured' | 'free_first' | 'paid_first' | 'lessons'>('featured');
   const [loading, setLoading] = useState(true);
   const [selectedDetailCourse, setSelectedDetailCourse] = useState<Course | null>(null);
-  const [paymentModalCourse, setPaymentModalCourse] = useState<Course | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -3955,7 +4012,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
                     }
                     onNavigate('/belajar/' + course.slug);
                   } else {
-                    setPaymentModalCourse(course);
+                    onNavigate('/kelas/' + course.slug + '?buy=1');
                   }
                 }}
               />
@@ -4013,28 +4070,8 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
               if (crs.price === 0) {
                 onNavigate('/belajar/' + crs.slug);
               } else {
-                setPaymentModalCourse(crs);
+                onNavigate('/kelas/' + crs.slug + '?buy=1');
               }
-            }}
-          />
-        )}
-
-        {/* 1-Click Mayar Payment Modal */}
-        {paymentModalCourse && (
-          <MayarPaymentModal
-            course={{
-              id: paymentModalCourse.slug,
-              title: paymentModalCourse.title,
-              price: paymentModalCourse.price,
-              faculty: paymentModalCourse.faculty,
-              programType: paymentModalCourse.program_type,
-              tutor: paymentModalCourse.tutor,
-              lessons: paymentModalCourse.duration,
-            }}
-            onClose={() => setPaymentModalCourse(null)}
-            onSuccessRedirect={(slug) => {
-              setPaymentModalCourse(null);
-              onNavigate('/belajar/' + slug);
             }}
           />
         )}
@@ -6476,7 +6513,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           {/* ========================================================================= */}
           {tab === 'gateway' && (() => {
             const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://almadraj-edu.com';
-            const webhookUrl = `${originUrl}/api/mayar/webhook?secret=almadraj_mayar_secret_key`;
+            const webhookUrl = `${originUrl}/api/mayar/webhook?secret=YOUR_MAYAR_WEBHOOK_SECRET`;
 
             const handleCopyWebhook = () => {
               if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -6502,7 +6539,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                           Integrasi Payment Gateway Mayar.id
                         </h2>
                         <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
-                          Sistem Siap
+                          Kode Siap
                         </span>
                       </div>
                       <p className="text-xs text-[#446252] mt-1 max-w-2xl leading-relaxed">
@@ -6512,7 +6549,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </div>
 
                   <a
-                    href="https://dashboard.mayar.id"
+                    href="https://web.mayar.id"
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#006d77] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00545c] transition"
@@ -6530,7 +6567,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                         1. Webhook URL Al Madraj untuk Mayar
                       </h3>
                       <p className="text-xs text-[#6c8577] mt-0.5">
-                        Salin URL ini dan tempelkan pada menu <strong>Integrasi &gt; Webhook</strong> di Dashboard Mayar Anda.
+                        Ganti placeholder secret, lalu tempelkan URL pada menu <strong>Integrasi &gt; Webhook</strong> di Dashboard Mayar.
                       </p>
                     </div>
                     <button
@@ -6548,7 +6585,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </div>
 
                   <div className="text-xs text-[#6c8577] space-y-1">
-                    <p>⚡ <strong>Event Webhook yang diproses:</strong> <code>payment.received</code> (mengaktifkan akses kelas santri secara instan) dan <code>payment.reminder</code> (notifikasi pengingat).</p>
+                    <p><strong>Jangan gunakan teks placeholder.</strong> Nilai setelah <code>?secret=</code> harus sama persis dengan <code>MAYAR_WEBHOOK_SECRET</code> di Vercel.</p>
+                    <p><strong>Event yang diproses:</strong> <code>payment.received</code> dan <code>payment.reminder</code>.</p>
                   </div>
                 </div>
 
@@ -6571,7 +6609,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
                     <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
                       <p className="font-mono text-xs font-bold text-[#006d77]">MAYAR_WEBHOOK_SECRET</p>
-                      <p className="text-[11px] text-[#6c8577]">Secret verifikasi signature webhook (samakan dengan secret di URL webhook).</p>
+                      <p className="text-[11px] text-[#6c8577]">String acak panjang untuk mengamankan endpoint; samakan dengan nilai secret pada URL webhook.</p>
                     </div>
 
                     <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
@@ -6582,6 +6620,11 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                     <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1">
                       <p className="font-mono text-xs font-bold text-[#006d77]">APP_URL</p>
                       <p className="text-[11px] text-[#6c8577]">Domain website Al Madraj (contoh: <code>{originUrl}</code>).</p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#edf4ef] bg-[#f9fbfa] p-3.5 space-y-1 sm:col-span-2">
+                      <p className="font-mono text-xs font-bold text-[#006d77]">MAYAR_API_URL</p>
+                      <p className="text-[11px] text-[#6c8577]"><code>https://api.mayar.id/hl/v2/invoices/create</code> untuk production.</p>
                     </div>
                   </div>
                 </div>

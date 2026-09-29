@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     const customerName = profile.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Santri Al Madraj';
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const appUrl = (process.env.APP_URL || req.headers.origin || 'http://localhost:5173').replace(/\/$/, '');
-    const apiUrl = process.env.MAYAR_API_URL || 'https://api.mayar.id/hl/v1/payment/create';
+    const apiUrl = process.env.MAYAR_API_URL || 'https://api.mayar.id/hl/v2/invoices/create';
 
     const mayarResponse = await fetch(apiUrl, {
       method: 'POST',
@@ -70,11 +70,21 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         name: customerName,
         email: user.email,
-        amount: Number(order.amount),
         mobile: customerMobile,
-        redirectURL: appUrl + '/pembayaran/' + order.id,
+        redirectUrl: appUrl + '/pembayaran/' + order.id,
         description: 'Al Madraj - ' + (order.courses?.title || 'Program Belajar') + ' (Order #' + order.id.slice(0, 8) + ')',
         expiredAt: expiresAt,
+        items: [
+          {
+            quantity: 1,
+            rate: Number(order.amount),
+            description: order.courses?.title || 'Program Belajar Al Madraj',
+          },
+        ],
+        extraData: {
+          orderId: order.id,
+          courseId: order.course_id,
+        },
       }),
     });
 

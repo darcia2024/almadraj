@@ -37,7 +37,6 @@ import { supabase } from '../lib/supabase';
 import { galleryPhotos, landingGalleryPhotos, GalleryPhoto, getCourseCoverImage } from '../data/galleryData';
 import { GalleryLightboxModal } from './GalleryLightboxModal';
 import { getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
-import { MayarPaymentModal } from './MayarPaymentModal';
 import { loadTestimonials, getStoredTestimonials, TestimonialItem } from '../data/testimonialsData';
 
 type Faculty = 'Semua' | 'Syariah' | 'Ushuluddin' | 'Lughah Arabiyyah';
@@ -151,7 +150,6 @@ export const WebsitePage: React.FC = () => {
   const [faculty, setFaculty] = useState<Faculty>('Semua');
   const [query, setQuery] = useState('');
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
-  const [paymentCourse, setPaymentCourse] = useState<Program | null>(null);
   const [selectedGalleryPhoto, setSelectedGalleryPhoto] = useState<GalleryPhoto | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
@@ -778,26 +776,9 @@ export const WebsitePage: React.FC = () => {
             program={selectedProgram}
             onClose={() => setSelectedProgram(null)}
             onEnroll={() => {
-              setPaymentCourse(selectedProgram);
-            }}
-          />
-        )}
-        {paymentCourse && (
-          <MayarPaymentModal
-            course={{
-              id: paymentCourse.id,
-              title: paymentCourse.title,
-              price: paymentCourse.price,
-              faculty: paymentCourse.faculty,
-              programType: paymentCourse.programType,
-              tutor: paymentCourse.tutor,
-              lessons: paymentCourse.lessons,
-            }}
-            onClose={() => setPaymentCourse(null)}
-            onSuccessRedirect={(slug) => {
-              setPaymentCourse(null);
+              const slug = selectedProgram.id;
               setSelectedProgram(null);
-              window.location.href = '/belajar/' + slug;
+              window.location.href = `/kelas/${slug}?buy=1`;
             }}
           />
         )}

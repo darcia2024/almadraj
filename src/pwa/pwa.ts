@@ -82,6 +82,17 @@ export const initPwa = () => {
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
 
+  if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.getRegistrations().then((registrations) =>
+      Promise.all(registrations.map((registration) => registration.unregister()))
+    );
+    if ('caches' in window) {
+      void caches.keys().then((keys) =>
+        Promise.all(keys.filter((key) => key.startsWith('almadraj-')).map((key) => caches.delete(key)))
+      );
+    }
+  }
+
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredPrompt = event as BeforeInstallPromptEvent;

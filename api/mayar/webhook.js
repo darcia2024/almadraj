@@ -78,12 +78,15 @@ export default async function handler(req, res) {
   if (!isPaidEvent && !isReminderEvent) return res.status(200).json({ received: true, processed: false, note: 'Unhandled event: ' + event });
   const data = payload.data || payload;
   const providerCheckoutId = data.id || data.paymentId || data.payment_id;
+  const providerProductId = data.productId || data.product_id || data.invoiceId || data.invoice_id;
   const providerPaymentId = data.transactionId || data.transaction_id || data.id;
-  if (!providerCheckoutId && !providerPaymentId) return res.status(400).json({ message: 'Payment identifiers missing' });
+  const extraData = data.extraData || data.extra_data || {};
+  const orderId = extraData.orderId || extraData.order_id;
+  if (!orderId && !providerCheckoutId && !providerPaymentId) return res.status(400).json({ message: 'Payment identifiers missing' });
 
   try {
-    const selectOrder = async (field, value) => value ? (await supabaseFetch('orders?' + field + '=eq.' + encodeURIComponent(value) + '&select=id,user_id,course_id,amount,status,courses(title)'))[0] : null;
-    const order = await selectOrder('provider_checkout_id', providerCheckoutId) || await selectOrder('provider_payment_id', providerPaymentId);
+    const selectOrder = async (field, value) => value ? (await supabaseFetch('orders?' + field + '=eq.' + encodeURIComponent(value) + '&select=id,user_id,course_id,amount,status,provider_checkout_id,provider_payment_id,courses(title)'))[0] : null;
+    const order = await selectOrder('id', orderId) || await selectOrder('provider_checkout_id', providerCheckoutId) || await selectOrder('provider_checkout_id', providerProductId) || await selectOrder('provider_payment_id', providerPaymentId);
     if (!order) return res.status(202).json({ received: true, processed: false });
 
     const paidAmount = Number(data.amount ?? data.totalAmount ?? data.total_amount);
@@ -97,7 +100,7 @@ export default async function handler(req, res) {
     }
 
     if (order.status === 'paid') return res.status(200).json({ received: true, processed: true, duplicate: true });
-    const response = await fetch(process.env.SUPABASE_URL + '/rest/v1/rpc/mark_lms_order_paid', { method: 'POST', headers: supabaseKeyHeaders(), body: JSON.stringify({ p_provider_checkout_id: providerCheckoutId || '', p_provider_payment_id: providerPaymentId || '' }) });
+    const response = await fetch(process.env.SUPABASE_URL + '/rest/v1/rpc/mark_lms_order_paid', { method: 'POST', headers: supabaseKeyHeaders(), body: JSON.stringify({ p_provider_checkout_id: order.provider_checkout_id || providerCheckoutId || '', p_provider_payment_id: order.provider_payment_id || providerPaymentId || '' }) });
     if (!response.ok) return res.status(202).json({ received: true, processed: false });
     if (order) {
       await supabaseFetch('notifications', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ user_id: order.user_id, type: 'payment_received', title: 'Pembayaran berhasil', body: 'Akses kelas ' + (order.courses?.title || 'Al Madroj') + ' sudah aktif.', order_id: order.id }) });

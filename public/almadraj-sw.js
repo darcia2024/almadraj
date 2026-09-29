@@ -8,7 +8,7 @@
  *     jaringan, jadi progress, transaksi, dan status bayar selalu data terbaru.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2-mayar-checkout';
 const SHELL_CACHE = 'almadraj-shell-' + VERSION;
 const ASSET_CACHE = 'almadraj-assets-' + VERSION;
 const MEDIA_CACHE = 'almadraj-media-' + VERSION;

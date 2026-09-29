@@ -24,6 +24,8 @@ Isi secret berikut hanya di environment server/Vercel, jangan di source code dan
 ```text
 SUPABASE_SECRET_KEY=...
 MAYAR_API_KEY=...
+MAYAR_WEBHOOK_SECRET=...
+MAYAR_API_URL=https://api.mayar.id/hl/v2/invoices/create
 APP_URL=https://domain-produksi-al-madraj.com
 ```
 
@@ -36,6 +38,8 @@ https://domain-produksi-al-madraj.com/api/mayar/webhook?secret=ISI_DENGAN_MAYAR_
 ```
 
 Event yang diproses adalah `payment.received` dan `payment.reminder`. Enrollment baru berubah menjadi `active` setelah `payment.received` berhasil diproses. Jangan menaruh URL webhook yang memuat secret di source code atau tangkapan layar publik.
+
+Integrasi checkout memakai Invoice Mayar API v2. Untuk sandbox, gunakan `https://api.mayar.club/hl/v2/invoices/create` dan API key sandbox yang sesuai.
 
 ## 3. Operasional
 
