@@ -31,6 +31,32 @@ const supabaseFetch = async (path, options = {}) => {
   return data;
 };
 
+// Ref project Supabase dari URL (https://<ref>.supabase.co) atau dari klaim `iss` token login.
+const projectRefFromUrl = (value) => {
+  try { return new URL(value).hostname.split('.')[0]; } catch { return ''; }
+};
+const projectRefFromToken = (token) => {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    return projectRefFromUrl(payload.iss || '');
+  } catch { return ''; }
+};
+
+// Jelaskan kenapa Supabase menolak token, tanpa membocorkan key apa pun.
+const explainAuthFailure = (token, status, body) => {
+  const serverRef = projectRefFromUrl(process.env.SUPABASE_URL);
+  const tokenRef = projectRefFromToken(token);
+  if (tokenRef && serverRef && tokenRef !== serverRef) {
+    return `SUPABASE_URL di Vercel mengarah ke project "${serverRef}", sedangkan website login ke project "${tokenRef}". Samakan SUPABASE_URL dan SUPABASE_SECRET_KEY dengan project "${tokenRef}", lalu Redeploy.`;
+  }
+  const detail = String(body?.message || body?.msg || body?.error_description || body?.error || '');
+  if (/invalid api key|no api key/i.test(detail)) {
+    return `SUPABASE_SECRET_KEY di Vercel bukan key milik project "${serverRef}". Ambil Secret/Service Role key dari project tersebut, lalu Redeploy.`;
+  }
+  if (status === 401 || status === 403) return 'Session login tidak valid atau telah berakhir. Silakan keluar lalu masuk lagi.';
+  return 'Verifikasi login ke Supabase gagal (' + status + (detail ? ': ' + detail : '') + ').';
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
   if (!rateLimit('mayar-checkout:' + (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown'))) return res.status(429).json({ message: 'Too many checkout requests' });
@@ -42,8 +68,12 @@ export default async function handler(req, res) {
 
   try {
     const userResponse = await fetch(process.env.SUPABASE_URL + '/auth/v1/user', { headers: { ...supabaseKeyHeaders(false), Authorization: 'Bearer ' + token } });
-    const user = await userResponse.json();
-    if (!userResponse.ok || !user.id) return res.status(401).json({ message: 'Session login tidak valid atau telah berakhir.' });
+    const user = await userResponse.json().catch(() => ({}));
+    if (!userResponse.ok || !user.id) {
+      const message = explainAuthFailure(token, userResponse.status, user);
+      console.warn('[mayar-checkout] Verifikasi login gagal:', userResponse.status, message);
+      return res.status(401).json({ message });
+    }
     const orderId = req.body?.orderId;
     if (!orderId) return res.status(400).json({ message: 'orderId wajib diisi.' });
     const orders = await supabaseFetch('orders?id=eq.' + encodeURIComponent(orderId) + '&user_id=eq.' + encodeURIComponent(user.id) + '&select=id,amount,status,course_id,checkout_url,expires_at,courses(title)');
