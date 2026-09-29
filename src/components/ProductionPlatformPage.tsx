@@ -10,6 +10,7 @@ import {
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
 import { InstallAppButton } from '../pwa/PwaLayer';
+import { MayarCheckoutModal, MayarCheckoutSession } from './MayarCheckoutModal';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 import {
   TestimonialItem,
@@ -2437,6 +2438,7 @@ const CourseRouteV2 = ({
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const checkoutAttempted = useRef(false);
+  const [checkoutSession, setCheckoutSession] = useState<MayarCheckoutSession | null>(null);
   const [previewVideo, setPreviewVideo] = useState<{ id: string; title: string; youtubeId?: string } | null>(null);
 
   useEffect(() => {
@@ -2510,7 +2512,8 @@ const CourseRouteV2 = ({
         throw new Error(result.message || 'Checkout Mayar belum tersedia pada server ini.');
       }
 
-      window.location.assign(result.checkoutUrl);
+      setCheckoutSession({ checkoutUrl: result.checkoutUrl, orderId: orderResult.data.id, courseTitle: course.title, courseSlug: course.slug, amount: Number(orderResult.data.amount ?? course.price) });
+      setCheckoutLoading(false);
     } catch (error) {
       checkoutAttempted.current = false;
       setCheckoutError(error instanceof Error ? error.message : 'Gagal menghubungkan pembayaran Mayar.');
@@ -2604,6 +2607,7 @@ const CourseRouteV2 = ({
 
   return (
     <BackendShell profile={profile} onNavigate={onNavigate} onLogout={onLogout}>
+      {checkoutSession && <MayarCheckoutModal session={checkoutSession} onClose={() => setCheckoutSession(null)} onNavigate={onNavigate} />}
       <div className="space-y-8 pb-20 lg:pb-12">
         {checkoutError && (
           <div role="alert" className="flex items-start justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -3393,6 +3397,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [hasActiveAccess, setHasActiveAccess] = useState(false);
   const [mayarError, setMayarError] = useState<string | null>(null);
+  const [checkoutSession, setCheckoutSession] = useState<MayarCheckoutSession | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -3485,7 +3490,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
       if (!response.ok || !result.checkoutUrl) {
         throw new Error(result.message || 'Payment gateway Mayar sedang dalam tahap penyiapan.');
       }
-      window.location.assign(result.checkoutUrl);
+      setCheckoutSession({ checkoutUrl: result.checkoutUrl, orderId: order.data.id, courseTitle: course.title, courseSlug: course.slug, amount: Number(order.data.amount ?? course.price) });
     } catch (submitError: any) {
       const msg = submitError?.message || 'Checkout Mayar belum aktif.';
       setMayarError(msg);
@@ -3521,6 +3526,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+      {checkoutSession && <MayarCheckoutModal session={checkoutSession} onClose={() => setCheckoutSession(null)} onNavigate={onNavigate} />}
       {/* Left Column: Course Overview */}
       <section className="rounded-2xl border border-[#dce9df] bg-white p-6 sm:p-8">
         <button onClick={() => onNavigate('/kelas/' + course.slug)} className="flex items-center gap-2 text-sm font-semibold text-[#607568] hover:text-[#006d77]">
