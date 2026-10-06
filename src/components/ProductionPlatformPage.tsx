@@ -60,7 +60,10 @@ type Course = {
   modul_url?: string;
   mayar_url?: string;
   has_certificate?: boolean;
+  tingkat?: number | null;
+  is_bundle?: boolean;
 };
+type CourseAccessLinks = { course_id: string; whatsapp_group_url: string; muqorror_url: string };
 type Lesson = {
   id: string;
   course_id: string;
@@ -2440,12 +2443,35 @@ const CourseRouteV2 = ({
   const checkoutAttempted = useRef(false);
   const [checkoutSession, setCheckoutSession] = useState<MayarCheckoutSession | null>(null);
   const [previewVideo, setPreviewVideo] = useState<{ id: string; title: string; youtubeId?: string } | null>(null);
+  const [bimbelSiblings, setBimbelSiblings] = useState<Course[]>([]);
+  const [ownedSiblingIds, setOwnedSiblingIds] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => {
       const sb = requireSupabase();
       const result = await sb.from('courses').select('*').eq('slug', slug).eq('is_published', true).single();
       setCourse(result.data);
+      if (result.data?.program_type === 'Bimbel' && result.data.tingkat) {
+        const siblings = await sb
+          .from('courses')
+          .select('*')
+          .eq('program_type', 'Bimbel')
+          .eq('faculty', result.data.faculty)
+          .eq('tingkat', result.data.tingkat)
+          .eq('is_published', true)
+          .order('title');
+        const siblingRows = ((siblings.data || []) as Course[]).filter((item) => item.id !== result.data.id);
+        setBimbelSiblings(siblingRows);
+        if (user && siblingRows.length) {
+          const owned = await sb
+            .from('enrollments')
+            .select('course_id')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .in('course_id', siblingRows.map((item) => item.id));
+          setOwnedSiblingIds(((owned.data || []) as { course_id: string }[]).map((item) => item.course_id));
+        }
+      }
       if (result.data) {
         const lessons = await sb
           .from('lessons')
@@ -2584,6 +2610,10 @@ const CourseRouteV2 = ({
   })) : []);
 
   const handleEnroll = async () => {
+    if (enrolled) {
+      onNavigate('/belajar/' + course.slug);
+      return;
+    }
     if (isFree) {
       if (user) {
         try {
@@ -2797,6 +2827,39 @@ const CourseRouteV2 = ({
             </div>
           </div>
         </section>
+
+        {course.is_bundle ? (
+          <BundleContentsSection
+            bundle={course}
+            members={bimbelSiblings.filter((item) => !item.is_bundle)}
+            ownedIds={ownedSiblingIds}
+            hasAccess={hasAccess}
+            onOpen={(item) => onNavigate((hasAccess || ownedSiblingIds.includes(item.id) ? '/belajar/' : '/kelas/') + item.slug)}
+          />
+        ) : (() => {
+          const bundle = bimbelSiblings.find((item) => item.is_bundle && item.price > 0);
+          if (!bundle || enrolled || ownedSiblingIds.includes(bundle.id)) return null;
+          const memberCount = bimbelSiblings.filter((item) => !item.is_bundle).length + 1;
+          return (
+            <section className="flex flex-col gap-4 rounded-[24px] border border-amber-200 bg-amber-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#b45309]">Lebih hemat</p>
+                <h2 className="mt-1 text-lg font-bold text-[#143428]">{bundle.title}</h2>
+                <p className="mt-1 text-sm text-[#5c7768]">
+                  Ambil semua {memberCount} maddah {course.faculty} Tingkat {course.tingkat} sekaligus seharga {money(bundle.price)}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('/kelas/' + bundle.slug)}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#b45309] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#92400e] active:scale-95 transition cursor-pointer"
+              >
+                <span>Lihat Paket Lengkap</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </section>
+          );
+        })()}
 
         {/* 2-Column Main Layout: Left Content, Right Sticky Sidebar */}
         <div className="grid gap-8 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_390px] items-start">
@@ -3389,6 +3452,72 @@ const CourseRouteV2 = ({
   );
 };
 
+const BundleContentsSection = ({
+  bundle,
+  members,
+  ownedIds,
+  hasAccess,
+  onOpen,
+}: {
+  bundle: Course;
+  members: Course[];
+  ownedIds: string[];
+  hasAccess: boolean;
+  onOpen: (course: Course) => void;
+}) => {
+  const separateTotal = members.reduce((total, item) => total + (item.price || 0), 0);
+  const saving = separateTotal - bundle.price;
+  return (
+    <section className="rounded-[24px] border border-[#dce9df] bg-white p-5 sm:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-[#006d77]">Isi paket</p>
+          <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[#143428]">
+            {members.length} maddah {bundle.faculty} Tingkat {bundle.tingkat}
+          </h2>
+          <p className="mt-1 text-xs text-[#597566]">
+            {hasAccess
+              ? 'Akses semua maddah di bawah sudah aktif. Pilih maddah untuk membuka rekaman, grup WhatsApp, dan PDF muqorror.'
+              : 'Sekali bayar, akses rekaman, grup WhatsApp, dan PDF muqorror semua maddah ini langsung aktif.'}
+          </p>
+        </div>
+        {!hasAccess && saving > 0 && (
+          <div className="shrink-0 rounded-2xl bg-amber-50 px-4 py-3 text-right">
+            <p className="text-[11px] text-[#7c6a4f]">Beli satuan <span className="line-through">{money(separateTotal)}</span></p>
+            <p className="text-sm font-bold text-[#b45309]">Hemat {money(saving)}</p>
+          </div>
+        )}
+      </div>
+      <div className="mt-5 divide-y divide-[#edf4ef]">
+        {members.map((item) => {
+          const owned = hasAccess || ownedIds.includes(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onOpen(item)}
+              className="flex w-full items-center justify-between gap-4 py-3.5 text-left hover:text-[#006d77] cursor-pointer"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${owned ? 'bg-[#006d77] text-white' : 'bg-[#e5f4f2] text-[#006d77]'}`}>
+                  {owned ? <Check className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
+                </span>
+                <span className="truncate text-sm font-semibold text-[#17382c]">{item.title}</span>
+              </span>
+              <span className="shrink-0 text-xs font-semibold text-[#607568]">
+                {owned ? 'Buka' : item.price > 0 ? money(item.price) : ''}
+              </span>
+            </button>
+          );
+        })}
+        {!members.length && (
+          <p className="py-4 text-sm text-[#607568]">Daftar maddah paket ini sedang disiapkan.</p>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate: (path: string) => void; onError: (message: string) => void }) => {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3701,6 +3830,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
   const [query, setQuery] = useState('');
   const [programType, setProgramType] = useState<'Semua' | ProgramType | 'Gratis'>('Semua');
   const [faculty, setFaculty] = useState('Semua');
+  const [tingkat, setTingkat] = useState<'Semua' | number>('Semua');
   const [sortBy, setSortBy] = useState<'featured' | 'free_first' | 'paid_first' | 'lessons'>('featured');
   const [loading, setLoading] = useState(true);
   const [selectedDetailCourse, setSelectedDetailCourse] = useState<Course | null>(null);
@@ -3743,6 +3873,11 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
   }, [profile?.id, onError]);
 
   const faculties = ['Semua', ...Array.from(new Set(courses.map((course) => course.faculty)))];
+  const bimbelTingkats = Array.from(new Set(
+    courses
+      .filter((course) => course.program_type === 'Bimbel' && course.tingkat && (faculty === 'Semua' || course.faculty === faculty))
+      .map((course) => course.tingkat as number)
+  )).sort((a, b) => a - b);
 
   const visibleCourses = useMemo(() => {
     let filtered = courses.filter((course) => {
@@ -3757,12 +3892,22 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
       }
 
       const matchesFaculty = faculty === 'Semua' || course.faculty === faculty;
+      const matchesTingkat = programType !== 'Bimbel' || tingkat === 'Semua' || course.tingkat === tingkat;
       const tutorName = getCourseTutorName(course.slug, course.tutor);
       const searchableText = `${course.title} ${course.faculty} ${course.summary} ${tutorName} ${detail?.kitabName || ''} ${detail?.authorName || ''}`.toLowerCase();
       const matchesQuery = !query.trim() || searchableText.includes(query.toLowerCase().trim());
 
-      return matchesProgramType && matchesFaculty && matchesQuery;
+      return matchesProgramType && matchesFaculty && matchesTingkat && matchesQuery;
     });
+
+    // Bimbel reads as a timetable: fakultas, then tingkat, with the bundle leading each group.
+    if (programType === 'Bimbel' && sortBy === 'featured') {
+      filtered = [...filtered].sort((a, b) =>
+        a.faculty.localeCompare(b.faculty)
+        || (a.tingkat || 99) - (b.tingkat || 99)
+        || Number(Boolean(b.is_bundle)) - Number(Boolean(a.is_bundle))
+        || a.title.localeCompare(b.title));
+    }
 
     if (sortBy === 'free_first') {
       filtered = [...filtered].sort((a, b) => a.price - b.price);
@@ -3777,7 +3922,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
     }
 
     return filtered;
-  }, [courses, programType, faculty, query, sortBy]);
+  }, [courses, programType, faculty, tingkat, query, sortBy]);
 
   const handleSelectQuickTag = (tag: string) => {
     if (tag === 'Semua') {
@@ -3952,7 +4097,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
                     <button
                       key={item}
                       type="button"
-                      onClick={() => setFaculty(item)}
+                      onClick={() => { setFaculty(item); setTingkat('Semua'); }}
                       aria-pressed={active}
                       className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                         active
@@ -3966,6 +4111,29 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
                   );
                 })}
               </div>
+              {programType === 'Bimbel' && bimbelTingkats.length > 0 && (
+                <div className="flex items-center gap-1.5 border-l border-[#d0e3d7] pl-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#799484] shrink-0">Tingkat:</span>
+                  {(['Semua', ...bimbelTingkats] as const).map((item) => {
+                    const active = tingkat === item;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setTingkat(item)}
+                        aria-pressed={active}
+                        className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          active
+                            ? 'border border-[#006d77] bg-[#006d77] text-white shadow-xs'
+                            : 'border border-[#d0e3d7] bg-white text-[#4e6e5d] hover:border-[#006d77] hover:text-[#006d77]'
+                        }`}
+                      >
+                        {item === 'Semua' ? 'Semua' : item}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Total Count & Reset Trigger */}
@@ -3977,6 +4145,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
                   onClick={() => {
                     setFaculty('Semua');
                     setProgramType('Semua');
+                    setTingkat('Semua');
                     setQuery('');
                   }}
                   className="font-semibold text-[#b45309] hover:underline cursor-pointer"
@@ -4156,6 +4325,12 @@ const CatalogCourseCard = ({
 
       {/* Card Body */}
       <div className="flex flex-1 flex-col p-3 sm:p-5 text-left">
+        {course.program_type === 'Bimbel' && (course.is_bundle || course.tingkat) && (
+          <p className={`mb-1 sm:mb-1.5 text-[9.5px] sm:text-[11px] font-bold uppercase tracking-wider ${course.is_bundle ? 'text-[#b45309]' : 'text-[#167a5b]'}`}>
+            {course.is_bundle ? 'Paket Hemat · Semua Maddah' : 'Maddah'}{course.tingkat ? ` · Tingkat ${course.tingkat}` : ''}
+          </p>
+        )}
+
         {/* Judul Maddah / Program */}
         <h3 className="text-xs sm:text-[17px] font-bold leading-tight sm:leading-snug tracking-tight text-[#143428] transition-colors group-hover:text-[#006d77] line-clamp-2 min-h-[32px] sm:min-h-[46px]">
           {course.title}
@@ -4830,6 +5005,10 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     modul_url?: string;
     mayar_url?: string;
     has_certificate?: boolean;
+    tingkat?: string;
+    is_bundle?: boolean;
+    whatsapp_group_url?: string;
+    muqorror_url?: string;
   };
 
   type LessonDraft = {
@@ -5271,6 +5450,10 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       modul_url: course.modul_url || '',
       mayar_url: course.mayar_url || '',
       has_certificate: course.has_certificate ?? true,
+      tingkat: course.tingkat ? String(course.tingkat) : '',
+      is_bundle: Boolean(course.is_bundle),
+      whatsapp_group_url: '',
+      muqorror_url: '',
     } : {
       slug: '',
       title: '',
@@ -5289,7 +5472,24 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       modul_url: '',
       mayar_url: '',
       has_certificate: true,
+      tingkat: '',
+      is_bundle: false,
+      whatsapp_group_url: '',
+      muqorror_url: '',
     });
+    if (course) {
+      requireSupabase()
+        .from('course_access_links')
+        .select('whatsapp_group_url,muqorror_url')
+        .eq('course_id', course.id)
+        .maybeSingle()
+        .then(({ data }: { data: { whatsapp_group_url: string; muqorror_url: string } | null }) => {
+          if (!data) return;
+          setCourseDraft((draft) => draft && draft.id === course.id
+            ? { ...draft, whatsapp_group_url: data.whatsapp_group_url, muqorror_url: data.muqorror_url }
+            : draft);
+        }, () => null);
+    }
   };
 
   const startLesson = (lesson?: ProductionAdminLesson, targetCourseId?: string) => {
@@ -5328,6 +5528,11 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedSlug)) { onError('Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung.'); return; }
     const parsedPrice = Number(courseDraft.price);
     if (!Number.isFinite(parsedPrice) || parsedPrice < 0) { onError('Harga harus berupa angka nol atau lebih besar.'); return; }
+    const parsedTingkat = courseDraft.tingkat?.trim() ? Number(courseDraft.tingkat) : null;
+    if (parsedTingkat !== null && (!Number.isInteger(parsedTingkat) || parsedTingkat < 1 || parsedTingkat > 6)) { onError('Tingkat harus angka 1 sampai 6.'); return; }
+    const isBundle = courseDraft.program_type === 'Bimbel' && Boolean(courseDraft.is_bundle);
+    if (isBundle && parsedTingkat === null) { onError('Paket bundling wajib punya tingkat supaya maddah di dalamnya bisa dikenali.'); return; }
+    if (isBundle && courseDraft.is_published && parsedPrice <= 0) { onError('Isi harga paket bundling sebelum dipublikasikan.'); return; }
     if (courseDraft.is_published && [courseDraft.faculty, courseDraft.summary, courseDraft.tutor, courseDraft.schedule, courseDraft.duration].some((value) => !value.trim())) {
       onError('Fakultas, ringkasan, tutor, jadwal, dan durasi wajib lengkap sebelum kelas dipublikasikan.');
       return;
@@ -5355,6 +5560,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         modul_url: courseDraft.modul_url?.trim() || '',
         mayar_url: courseDraft.mayar_url?.trim() || '',
         has_certificate: courseDraft.has_certificate ?? true,
+        tingkat: parsedTingkat,
+        is_bundle: isBundle,
         updated_at: new Date().toISOString(),
       };
       let result = courseDraft.id
@@ -5379,6 +5586,20 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           ? await requireSupabase().from('courses').update(basePayload).eq('id', courseDraft.id)
           : await requireSupabase().from('courses').insert(basePayload);
         if (result.error) throw new Error(result.error.message);
+      }
+      const whatsappGroupUrl = courseDraft.whatsapp_group_url?.trim() || '';
+      const muqorrorUrl = courseDraft.muqorror_url?.trim() || '';
+      const savedCourse = await requireSupabase().from('courses').select('id').eq('slug', normalizedSlug).single();
+      if (savedCourse.data?.id) {
+        const linksResult = await requireSupabase().from('course_access_links').upsert({
+          course_id: savedCourse.data.id,
+          whatsapp_group_url: whatsappGroupUrl,
+          muqorror_url: muqorrorUrl,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'course_id' });
+        if (linksResult.error && (whatsappGroupUrl || muqorrorUrl)) {
+          throw new Error('Kelas tersimpan, tapi link grup WhatsApp / PDF muqorror gagal disimpan: ' + linksResult.error.message);
+        }
       }
       await recordAudit(courseDraft.id ? 'course.updated' : 'course.created', 'course', courseDraft.id, { slug: normalizedSlug });
       setCourseDraft(null);
@@ -7819,6 +8040,48 @@ create policy books_admin_manage on public.books for all to authenticated using 
                     </div>
                   )}
 
+                  {courseDraft.program_type === 'Bimbel' && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                      <ProductionAdminField
+                        label="Tingkat (1-6)"
+                        type="number"
+                        value={courseDraft.tingkat || ''}
+                        onChange={(value) => setCourseDraft({ ...courseDraft, tingkat: value })}
+                        placeholder="Contoh: 1"
+                      />
+                      <label className="flex items-start gap-2.5 text-xs sm:text-sm font-bold text-[#112d22] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(courseDraft.is_bundle)}
+                          onChange={(e) => setCourseDraft({ ...courseDraft, is_bundle: e.target.checked })}
+                          className="mt-0.5 h-4 w-4 rounded accent-[#006d77]"
+                        />
+                        <span>
+                          Ini paket bundling (semua maddah)
+                          <span className="mt-1 block text-[11px] font-normal text-gray-600">
+                            Santri yang membayar paket ini otomatis mendapat akses ke semua maddah Bimbel {courseDraft.faculty || 'fakultas ini'} dengan tingkat yang sama, termasuk maddah yang ditambahkan nanti.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  <ProductionAdminField
+                    label="Link Grup WhatsApp Peserta"
+                    value={courseDraft.whatsapp_group_url || ''}
+                    onChange={(value) => setCourseDraft({ ...courseDraft, whatsapp_group_url: value })}
+                    placeholder="https://chat.whatsapp.com/..."
+                  />
+                  <ProductionAdminField
+                    label="Link PDF Muqorror"
+                    value={courseDraft.muqorror_url || ''}
+                    onChange={(value) => setCourseDraft({ ...courseDraft, muqorror_url: value })}
+                    placeholder="https://drive.google.com/file/d/.../view"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    Link grup WhatsApp dan PDF muqorror bersifat privat: hanya tampil di ruang belajar santri yang aksesnya sudah aktif.
+                  </p>
+
                   <ProductionAdminField
                     label="Link Diktat / Modul PDF (Google Drive Embed / PDF Link)"
                     value={courseDraft.modul_url || ''}
@@ -9357,6 +9620,40 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
           ) : <section className="rounded-[20px] border border-[#cfe0d5] bg-[#f5fbf7] p-7 text-center sm:p-10"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e5f4f2] text-[#006d77]"><Search className="h-5 w-5" /></div><h2 className="mt-5 text-2xl font-semibold text-[#17382c]">Kelas tidak ditemukan.</h2><p className="mt-2 text-sm leading-6 text-[#607568]">Coba ubah kata kunci atau filter yang kamu pilih.</p><button onClick={() => { setSearch(''); setProgramFilter('Semua'); setFacultyFilter('Semua'); }} className="mt-5 text-sm font-bold text-[#006d77]">Reset filter</button></section>}</> : <section className="rounded-[22px] border border-[#cfe0d5] bg-[#f5fbf7] p-7 sm:p-9"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e5f4f2] text-[#006d77]"><BookOpen className="h-6 w-6" /></div><h2 className="mt-6 text-2xl font-semibold text-[#17382c]">Belum ada kelas aktif.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-[#607568]">Kamu belum memiliki kelas yang bisa dipelajari. Pilih program dari katalog terlebih dahulu untuk mulai belajar dan menyimpan progress.</p><button onClick={() => onNavigate('/kelas')} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Lihat katalog <ArrowRight className="h-4 w-4" /></button></section>}</div></BackendShell>;
 };
 
+const CourseAccessLinksCard = ({ links }: { links: CourseAccessLinks | null }) => {
+  if (!links?.whatsapp_group_url && !links?.muqorror_url) return null;
+  return (
+    <section className="rounded-[22px] border border-[#cfe6d8] bg-[#f3faf6] p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-wider text-[#006d77]">Akses kelas</p>
+      <p className="mt-1 text-sm text-[#4f6d5e]">Gabung grup dan simpan muqorror. Link ini hanya tampil untuk peserta yang aksesnya aktif.</p>
+      <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
+        {links.whatsapp_group_url && (
+          <a
+            href={links.whatsapp_group_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#1f9d55] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#17803f] transition"
+          >
+            <MessageCircle className="h-4 w-4" />
+            <span>Gabung Grup WhatsApp</span>
+          </a>
+        )}
+        {links.muqorror_url && (
+          <a
+            href={links.muqorror_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#006d77] bg-white px-5 py-3 text-sm font-bold text-[#006d77] hover:bg-[#e5f4f2] transition"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Buka PDF Muqorror</span>
+          </a>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, onLogout }: { path: string; user: { id: string; email?: string }; profile: Profile | null; onNavigate: (path: string) => void; onError: (message: string) => void; onLogout: () => void }) => {
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -9370,6 +9667,8 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
   const [whiteboardManagerOpen, setWhiteboardManagerOpen] = useState(false);
   const [teacherNotesEditorOpen, setTeacherNotesEditorOpen] = useState(false);
   const [certificateModalOpen, setCertificateModalOpen] = useState(false);
+  const [accessLinks, setAccessLinks] = useState<CourseAccessLinks | null>(null);
+  const [bundleMembers, setBundleMembers] = useState<Course[]>([]);
   const lastPersistedAt = useRef<Record<string, number>>({});
   const progressRef = useRef(progressByLesson);
 
@@ -9499,6 +9798,27 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
         return;
       }
       setAccessDenied(false);
+
+      const linksResult = await sb
+        .from('course_access_links')
+        .select('course_id,whatsapp_group_url,muqorror_url')
+        .eq('course_id', courseResult.data.id)
+        .maybeSingle();
+      setAccessLinks(linksResult.error ? null : (linksResult.data as CourseAccessLinks | null));
+
+      if (courseResult.data.is_bundle) {
+        const membersResult = await sb
+          .from('courses')
+          .select('*')
+          .eq('program_type', 'Bimbel')
+          .eq('is_bundle', false)
+          .eq('faculty', courseResult.data.faculty)
+          .eq('tingkat', courseResult.data.tingkat)
+          .eq('is_published', true)
+          .order('title');
+        setBundleMembers((membersResult.data || []) as Course[]);
+        return;
+      }
 
       let loadedLessons: Lesson[] = [];
       const primaryRes = await sb.from('lessons').select('id,course_id,title,content_type,duration,content_url,sort_order,teacher_notes,board_photos').eq('course_id', courseResult.data.id).eq('is_published', true).order('sort_order');
@@ -9647,6 +9967,32 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
       </BackendShell>
     );
   }
+  if (course.is_bundle) {
+    return (
+      <BackendShell profile={profile} onNavigate={onNavigate} onLogout={onLogout}>
+        <div className="space-y-5">
+          <button
+            onClick={() => onNavigate('/belajar')}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[#607568] hover:text-[#006d77] transition"
+          >
+            <ArrowLeft className="h-4 w-4" /> Kembali ke kelas saya
+          </button>
+          <section className="rounded-[22px] border border-[#dce9df] bg-white p-5 sm:p-7 shadow-xs">
+            <p className="text-xs font-semibold text-[#799083]">Ruang Belajar / {course.faculty} / Paket Bimbel</p>
+            <h1 className="mt-3 text-2xl font-bold leading-tight tracking-tight text-[#17382c] sm:text-3xl">{course.title}</h1>
+          </section>
+          <CourseAccessLinksCard links={accessLinks} />
+          <BundleContentsSection
+            bundle={course}
+            members={bundleMembers}
+            ownedIds={bundleMembers.map((item) => item.id)}
+            hasAccess
+            onOpen={(item) => onNavigate('/belajar/' + item.slug)}
+          />
+        </div>
+      </BackendShell>
+    );
+  }
   const activeProgress = activeLesson ? progressPercent(progressByLesson[activeLesson.id], activeLesson) : 0;
   const activeCompleted = Boolean(activeLesson && progressByLesson[activeLesson.id]?.completed_at);
   const activeYoutubeId = activeLesson?.content_url ? youtubeVideoId(activeLesson.content_url) : '';
@@ -9740,6 +10086,8 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                 </div>
               </div>
             </section>
+
+            <CourseAccessLinksCard links={accessLinks} />
 
             {/* Video Stage & Lesson Details Card */}
             <section className="overflow-hidden rounded-[24px] border border-[#d8e6dc] bg-white shadow-sm">
@@ -10151,7 +10499,7 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                       </p>
                     </div>
 
-                    {course.modul_url ? (
+                    {(accessLinks?.muqorror_url || course.modul_url) ? (
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
                         <div className="flex items-center gap-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#006d77] text-white shadow-sm">
@@ -10168,7 +10516,7 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <a
-                            href={course.modul_url}
+                            href={accessLinks?.muqorror_url || course.modul_url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 rounded-full bg-[#006d77] px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-sm hover:bg-[#00565e] transition cursor-pointer"

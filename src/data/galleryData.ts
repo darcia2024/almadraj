@@ -103,6 +103,13 @@ export const landingGalleryPhotos: GalleryPhoto[] = [
 
 export const getCourseCoverImage = (idOrTitle: string, faculty?: string): string => {
   const norm = `${idOrTitle || ''} ${faculty || ''}`.toLowerCase();
+  // Bimbel maddah use real halaqah photos instead of a Dars kitab cover.
+  if (norm.startsWith('bimbel-')) {
+    if (norm.includes('tafsir')) return '/gallery/almadraj-rumah-juang-tafsir.jpg';
+    if (norm.includes('adab')) return '/gallery/almadraj-rumah-juang-adab.jpg';
+    if (norm.includes('paket-lengkap')) return '/gallery/almadraj-rumah-sinai-wisuda.jpg';
+    return norm.includes('ushuluddin') ? '/gallery/almadraj-halaqah-santri.jpg' : '/gallery/almadraj-sinai-maddah.jpg';
+  }
   if (norm.includes('fikih') || norm.includes('syuja') || norm.includes('syariah')) {
     return '/courses/cover-fikih-matan-abi-syuja.png';
   }
