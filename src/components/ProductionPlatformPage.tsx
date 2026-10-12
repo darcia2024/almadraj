@@ -10095,6 +10095,19 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
               <div className="relative aspect-video w-full bg-black overflow-hidden flex items-center justify-center">
                 {activeLesson?.content_type === 'audio' ? (
                   activeLesson.content_url && getGoogleDriveEmbedUrl(activeLesson.content_url) ? (
+                    <DriveAudioStage
+                      key={activeLesson.id}
+                      streamUrl={getGoogleDriveStreamUrl(activeLesson.content_url)}
+                      title={activeLessonTitle}
+                      tutor={getCourseTutorName(course.slug, course.tutor)}
+                      startSeconds={progressByLesson[activeLesson.id]?.watched_seconds || 0}
+                      onProgress={(watched, duration, force) => {
+                        void persistProgress(activeLesson, watched, duration, false, force);
+                      }}
+                      onComplete={(watched, duration) => {
+                        void persistProgress(activeLesson, watched, duration, true, true);
+                      }}
+                      fallback={
                     <div className="relative h-full w-full bg-[#081f18] flex flex-col items-center justify-center p-4 sm:p-6">
                       <div className="w-full max-w-2xl rounded-2xl overflow-hidden border border-[#2b6d58] shadow-2xl bg-black">
                         <div className="bg-gradient-to-r from-[#006d77] to-[#102c22] px-4 py-3 flex items-center justify-between text-white">
@@ -10118,6 +10131,8 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                         <span>Dengarkan audio sambil membuka tab <strong>Foto Papan Tulis</strong> di bawah</span>
                       </div>
                     </div>
+                      }
+                    />
                   ) : activeLesson?.content_url ? (
                     <div className="h-full w-full flex items-center justify-center p-4 sm:p-6 bg-[#07241c]">
                       <div className="w-full max-w-2xl">
@@ -10925,6 +10940,43 @@ const formatPlaybackTime = (value: number) => {
     : `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+// Audio dari Google Drive: diputar dengan player Al Madraj (progress tercatat). Bila Drive
+// menolak pemutaran langsung (berkas tidak publik, kuota unduhan habis, format tidak didukung
+// browser), tampilkan player bawaan Drive sebagai cadangan.
+const DriveAudioStage = ({
+  streamUrl,
+  fallback,
+  ...playerProps
+}: {
+  streamUrl: string | null;
+  fallback: React.ReactNode;
+  title: string;
+  tutor?: string;
+  startSeconds?: number;
+  onProgress: (watched: number, duration: number, force?: boolean) => void;
+  onComplete: (watched: number, duration: number) => void;
+}) => {
+  const [failed, setFailed] = useState(false);
+  if (!streamUrl) return <>{fallback}</>;
+  if (failed) {
+    return (
+      <div className="relative h-full w-full">
+        {fallback}
+        <p className="absolute inset-x-0 top-2 mx-auto w-fit max-w-[92%] rounded-full bg-black/60 px-3 py-1 text-center text-[10.5px] font-medium text-amber-200 backdrop-blur">
+          Diputar lewat player Google Drive · progress materi ini tidak tercatat
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="h-full w-full flex items-center justify-center p-4 sm:p-6 bg-[#07241c]">
+      <div className="w-full max-w-2xl">
+        <AudioLessonPlayer audioUrl={streamUrl} onError={() => setFailed(true)} {...playerProps} />
+      </div>
+    </div>
+  );
+};
+
 const AudioLessonPlayer = ({
   audioUrl,
   title,
@@ -10933,6 +10985,7 @@ const AudioLessonPlayer = ({
   startSeconds = 0,
   onProgress,
   onComplete,
+  onError,
 }: {
   audioUrl: string;
   title: string;
@@ -10941,6 +10994,7 @@ const AudioLessonPlayer = ({
   startSeconds?: number;
   onProgress: (watched: number, duration: number, force?: boolean) => void;
   onComplete: (watched: number, duration: number) => void;
+  onError?: () => void;
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -11019,6 +11073,14 @@ const AudioLessonPlayer = ({
         src={audioUrl}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
+        onPause={(e) => {
+          setIsPlaying(false);
+          const audio = e.currentTarget;
+          // Simpan posisi saat dijeda supaya bisa dilanjutkan dari titik yang sama.
+          if (audio.duration && !audio.ended) onProgress(Math.floor(audio.currentTime), Math.floor(audio.duration), true);
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onError={() => { setIsPlaying(false); onError?.(); }}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         preload="metadata"
       />
@@ -11231,6 +11293,20 @@ const CertificateModal = ({
       </div>
     </div>
   );
+};
+
+// Alamat streaming berkas Drive publik ("siapa saja yang memiliki link") lewat Drive API,
+// supaya bisa diputar <audio> milik kita dan progress-nya tercatat. Link unduh biasa
+// (uc?export=download / drive.usercontent.google.com) ditolak Google dengan 403 untuk setiap
+// permintaan lintas-situs dari browser, jadi hanya jalur API ber-key yang bisa dipakai.
+// Tanpa VITE_GOOGLE_DRIVE_API_KEY fungsi ini mengembalikan null dan player bawaan Drive dipakai.
+export const getGoogleDriveStreamUrl = (url?: string | null): string | null => {
+  const apiKey = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY;
+  if (!url || !apiKey) return null;
+  const trimmed = url.trim();
+  if (!trimmed.includes('drive.google.com') && !trimmed.includes('docs.google.com')) return null;
+  const id = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1];
+  return id ? `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${encodeURIComponent(apiKey)}` : null;
 };
 
 export const getGoogleDriveEmbedUrl = (url?: string | null): string | null => {
