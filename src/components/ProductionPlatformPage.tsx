@@ -127,7 +127,9 @@ const compressAvatar = (file: File) => new Promise<Blob>((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-const routeScreen = (path: string): Screen => path.startsWith('/login') ? 'login' : path.startsWith('/register') ? 'register' : path.startsWith('/lupa-password') ? 'forgot' : path.startsWith('/admin') ? 'admin' : path === '/pengaturan' ? 'settings' : path === '/transaksi' ? 'transactions' : (path === '/kelas' || path === '/katalog') ? 'catalog' : path.startsWith('/kelas/') ? 'course' : path.startsWith('/checkout/') ? 'checkout' : path.startsWith('/pembayaran/') ? 'paymentStatus' : path === '/belajar' ? 'learningHub' : path.startsWith('/belajar/') ? 'learning' : 'dashboard';
+// Halaman ditentukan dari pathname saja; query (?q=, ?source=, ?lesson=) tidak boleh mengubah halaman.
+const routeScreen = (fullPath: string): Screen => routeScreenForPathname(fullPath.split(/[?#]/)[0] || '/');
+const routeScreenForPathname = (path: string): Screen => path.startsWith('/login') ? 'login' : path.startsWith('/register') ? 'register' : path.startsWith('/lupa-password') ? 'forgot' : path.startsWith('/admin') ? 'admin' : path === '/pengaturan' ? 'settings' : path === '/transaksi' ? 'transactions' : (path === '/kelas' || path === '/katalog') ? 'catalog' : path.startsWith('/kelas/') ? 'course' : path.startsWith('/checkout/') ? 'checkout' : path.startsWith('/pembayaran/') ? 'paymentStatus' : path === '/belajar' ? 'learningHub' : path.startsWith('/belajar/') ? 'learning' : 'dashboard';
 
 export const UserAvatar: React.FC<{
   src?: string | null;
