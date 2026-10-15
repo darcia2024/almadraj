@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { ArrowRight, CheckCircle2, Clock, ExternalLink, Loader2, LockKeyhole, X } from 'lucide-react';
 import { requireSupabase } from '../lib/supabase';
+import { WhatsAppGroupLinks } from './WhatsAppGroupLinks';
 
 export type MayarCheckoutSession = {
   checkoutUrl: string;
@@ -156,7 +157,7 @@ export const MayarCheckoutModal = ({
             )}
 
             {paid && (
-              <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+              <div className="flex h-full flex-col items-center overflow-y-auto px-6 py-8 text-center sm:px-8 [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto">
                 <motion.span
                   initial={{ scale: 0.4, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -169,10 +170,11 @@ export const MayarCheckoutModal = ({
                 <p className="mt-2 max-w-xs text-sm leading-6 text-[#607568]">
                   Akses <strong className="text-[#17231b]">{session.courseTitle}</strong> sudah aktif. Selamat belajar, semoga berkah.
                 </p>
+                <WhatsAppGroupLinks courseSlug={session.courseSlug} className="mt-7 max-w-sm" />
                 <button
                   type="button"
                   onClick={() => { onClose(); onNavigate('/belajar/' + session.courseSlug); }}
-                  className="mt-8 flex min-h-12 w-full max-w-xs items-center justify-center gap-2 rounded-full bg-[#006d77] px-6 text-sm font-bold text-white shadow-[0_10px_22px_rgba(0,109,119,0.24)] transition hover:bg-[#00565e] active:scale-[0.98]"
+                  className="mt-5 flex min-h-12 w-full max-w-sm shrink-0 items-center justify-center gap-2 rounded-full border border-[#006d77] bg-white px-6 text-sm font-bold text-[#006d77] transition hover:bg-[#e5f4f2] active:scale-[0.98]"
                 >
                   Mulai belajar sekarang <ArrowRight className="h-4 w-4" />
                 </button>

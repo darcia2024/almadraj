@@ -11,6 +11,7 @@ import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
 import { InstallAppButton } from '../pwa/PwaLayer';
 import { MayarCheckoutModal, MayarCheckoutSession } from './MayarCheckoutModal';
+import { WhatsAppGroupLinks, markWhatsAppGroupOpened, hasOpenedWhatsAppGroup } from './WhatsAppGroupLinks';
 import { COURSES_DETAIL_DATA, getCourseDetail, CourseDetail, getCourseTutorName } from '../data/coursesDetailData';
 import {
   TestimonialItem,
@@ -5009,6 +5010,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     is_bundle?: boolean;
     whatsapp_group_url?: string;
     muqorror_url?: string;
+    drive_folder_url?: string;
   };
 
   type LessonDraft = {
@@ -5035,6 +5037,9 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [progressRows, setProgressRows] = useState<ProductionAdminProgress[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null);
+  const [driveSyncing, setDriveSyncing] = useState(false);
+  const [driveSyncStatus, setDriveSyncStatus] = useState('');
+  const [driveSyncNewLessons, setDriveSyncNewLessons] = useState<Array<{ id: string; title: string }>>([]);
   const [lessonDraft, setLessonDraft] = useState<LessonDraft | null>(null);
   const [contentFile, setContentFile] = useState<File | null>(null);
   
@@ -5454,6 +5459,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       is_bundle: Boolean(course.is_bundle),
       whatsapp_group_url: '',
       muqorror_url: '',
+      drive_folder_url: '',
     } : {
       slug: '',
       title: '',
@@ -5476,17 +5482,24 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       is_bundle: false,
       whatsapp_group_url: '',
       muqorror_url: '',
+      drive_folder_url: '',
     });
+    setDriveSyncStatus('');
     if (course) {
       requireSupabase()
         .from('course_access_links')
-        .select('whatsapp_group_url,muqorror_url')
+        .select('*')
         .eq('course_id', course.id)
         .maybeSingle()
-        .then(({ data }: { data: { whatsapp_group_url: string; muqorror_url: string } | null }) => {
+        .then(({ data }: { data: { whatsapp_group_url: string; muqorror_url: string; drive_folder_id?: string } | null }) => {
           if (!data) return;
           setCourseDraft((draft) => draft && draft.id === course.id
-            ? { ...draft, whatsapp_group_url: data.whatsapp_group_url, muqorror_url: data.muqorror_url }
+            ? {
+                ...draft,
+                whatsapp_group_url: data.whatsapp_group_url,
+                muqorror_url: data.muqorror_url,
+                drive_folder_url: data.drive_folder_id ? 'https://drive.google.com/drive/folders/' + data.drive_folder_id : '',
+              }
             : draft);
         }, () => null);
     }
@@ -5589,15 +5602,20 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       }
       const whatsappGroupUrl = courseDraft.whatsapp_group_url?.trim() || '';
       const muqorrorUrl = courseDraft.muqorror_url?.trim() || '';
+      const driveFolderInput = courseDraft.drive_folder_url?.trim() || '';
+      const driveFolderId = getGoogleDriveFolderId(driveFolderInput);
+      if (driveFolderInput && !driveFolderId) throw new Error('Link folder Google Drive rekaman tidak dikenali. Salin link folder dari tombol Bagikan di Drive.');
       const savedCourse = await requireSupabase().from('courses').select('id').eq('slug', normalizedSlug).single();
       if (savedCourse.data?.id) {
         const linksResult = await requireSupabase().from('course_access_links').upsert({
           course_id: savedCourse.data.id,
           whatsapp_group_url: whatsappGroupUrl,
           muqorror_url: muqorrorUrl,
+          // Kolom ini baru ada setelah migrasi 20261015000100; untuk kelas Dars tidak dikirim.
+          ...(courseDraft.program_type === 'Bimbel' ? { drive_folder_id: driveFolderId } : {}),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'course_id' });
-        if (linksResult.error && (whatsappGroupUrl || muqorrorUrl)) {
+        if (linksResult.error && (whatsappGroupUrl || muqorrorUrl || driveFolderId)) {
           throw new Error('Kelas tersimpan, tapi link grup WhatsApp / PDF muqorror gagal disimpan: ' + linksResult.error.message);
         }
       }
@@ -6307,6 +6325,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                              {l.is_published && (
+                                <CopyShareButton
+                                  text={recordingShareMessage(selectedCourse.title, selectedCourse.slug, [{ id: l.id, title: l.title }])}
+                                  label="Link grup"
+                                  className="h-8 rounded-full border border-[#cfe6d8] px-3 text-[11px] font-bold text-[#1f7a46] hover:bg-[#f3faf6]"
+                                />
+                              )}
                               <button
                                 type="button"
                                 onClick={() => startLesson(l, selectedCourse.id)}
@@ -8082,6 +8107,58 @@ create policy books_admin_manage on public.books for all to authenticated using 
                     Link grup WhatsApp dan PDF muqorror bersifat privat: hanya tampil di ruang belajar santri yang aksesnya sudah aktif.
                   </p>
 
+                  {courseDraft.program_type === 'Bimbel' && !courseDraft.is_bundle && (
+                    <div className="space-y-2 rounded-xl border border-[#cfe3e5] bg-[#f3fafa] p-3.5">
+                      <ProductionAdminField
+                        label="Folder Google Drive Rekaman"
+                        value={courseDraft.drive_folder_url || ''}
+                        onChange={(value) => setCourseDraft({ ...courseDraft, drive_folder_url: value })}
+                        placeholder="https://drive.google.com/drive/folders/..."
+                      />
+                      <p className="text-[11px] leading-relaxed text-gray-600">
+                        PJ cukup mengunggah rekaman tiap pertemuan ke folder ini (akses: <strong>siapa saja yang memiliki link</strong>). File audio baru otomatis menjadi materi saat ruang belajar dibuka dan setiap malam, lalu santri mendapat notifikasi. Beri nama berurutan, misalnya <code>01 - Bab Kalam.mp3</code>.
+                      </p>
+                      {courseDraft.id && courseDraft.slug && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={driveSyncing}
+                            onClick={async () => {
+                              setDriveSyncing(true);
+                              setDriveSyncStatus('');
+                              setDriveSyncNewLessons([]);
+                              try {
+                                const result = await syncDriveRecordings(courseDraft.slug, true);
+                                setDriveSyncStatus(result.skipped === 'no-folder'
+                                  ? 'Simpan link folder dulu, lalu sinkronkan.'
+                                  : (result.files ?? 0) + ' rekaman di folder · ' + result.added + ' materi baru' + (result.hidden ? ' · ' + result.hidden + ' disembunyikan' : '') + '.');
+                                setDriveSyncNewLessons(result.lessons || []);
+                                if (result.added || result.hidden || result.restored) await loadData();
+                              } catch (syncError) {
+                                setDriveSyncStatus(syncError instanceof Error ? syncError.message : 'Sinkronisasi gagal.');
+                              } finally {
+                                setDriveSyncing(false);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-[#006d77] bg-white px-3.5 py-1.5 text-xs font-bold text-[#006d77] hover:bg-[#e5f4f2] disabled:opacity-60 cursor-pointer"
+                          >
+                            <RefreshCw className={'h-3.5 w-3.5 ' + (driveSyncing ? 'animate-spin' : '')} />
+                            {driveSyncing ? 'Menyinkronkan...' : 'Sinkronkan rekaman sekarang'}
+                          </button>
+                          {driveSyncStatus && <span className="text-[11px] text-gray-700">{driveSyncStatus}</span>}
+                          {driveSyncNewLessons.length > 0 && (
+                            <CopyShareButton
+                              text={recordingShareMessage(courseDraft.title, courseDraft.slug, driveSyncNewLessons)}
+                              label="Salin pesan untuk grup WhatsApp"
+                              copiedLabel="Pesan tersalin"
+                              className="rounded-full bg-[#1f9d55] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#17803f]"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <ProductionAdminField
                     label="Link Diktat / Modul PDF (Google Drive Embed / PDF Link)"
                     value={courseDraft.modul_url || ''}
@@ -9466,7 +9543,7 @@ const PaymentStatusRoute = ({ path, user, onNavigate }: { path: string; user: { 
   const course = Array.isArray(order.courses) ? order.courses[0] : order.courses;
   const paid = order.status === 'paid';
   const expired = order.status === 'expired' || order.status === 'cancelled';
-  return <div className="mx-auto max-w-2xl"><section className="rounded-[20px] border border-[#d4e1d8] bg-white p-6 text-center shadow-[0_14px_35px_rgba(7,84,71,0.06)] sm:p-9"><span className={'mx-auto grid h-14 w-14 place-items-center rounded-full ' + (paid ? 'bg-[#e5f4f2] text-[#006d77]' : expired ? 'bg-[#fff1eb] text-[#b36d4c]' : 'bg-[#eef8f2] text-[#006d77]')}>{paid ? <CheckCircle2 className="h-7 w-7" /> : expired ? <X className="h-7 w-7" /> : <RefreshCw className="h-6 w-6 animate-spin" />}</span><p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Status pembayaran</p><h1 className="mt-3 text-3xl font-semibold">{paid ? 'Pembayaran berhasil' : expired ? 'Tautan pembayaran berakhir' : 'Menunggu konfirmasi pembayaran'}</h1><p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[#607568]">{paid ? 'Akses kelas sudah aktif dan materi dapat langsung dibuka.' : expired ? 'Buat order baru dari halaman kelas untuk memperoleh tautan pembayaran baru.' : 'Halaman ini memeriksa status secara otomatis. Setelah pembayaran terkonfirmasi, akses kelas akan langsung aktif secara otomatis.'}</p><div className="mx-auto mt-7 max-w-md rounded-[16px] bg-[#f5fbf7] p-5 text-left"><Summary label="Program" value={course?.title || 'Program Al Madraj'} /><Summary label="Total" value={money(order.amount)} strong /><Summary label="Status" value={order.status.toUpperCase()} /></div><div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">{paid && <button onClick={() => onNavigate('/belajar/' + (course?.slug || ''))} className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Buka ruang belajar <ArrowRight className="h-4 w-4" /></button>}{!paid && !expired && order.checkout_url && <a href={order.checkout_url} className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Kembali ke pembayaran <CreditCard className="h-4 w-4" /></a>}<button onClick={() => void load()} className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#cfe0d5] px-5 text-sm font-bold text-[#315747]"><RefreshCw className="h-4 w-4" />Periksa lagi</button></div></section></div>;
+  return <div className="mx-auto max-w-2xl"><section className="rounded-[20px] border border-[#d4e1d8] bg-white p-6 text-center shadow-[0_14px_35px_rgba(7,84,71,0.06)] sm:p-9"><span className={'mx-auto grid h-14 w-14 place-items-center rounded-full ' + (paid ? 'bg-[#e5f4f2] text-[#006d77]' : expired ? 'bg-[#fff1eb] text-[#b36d4c]' : 'bg-[#eef8f2] text-[#006d77]')}>{paid ? <CheckCircle2 className="h-7 w-7" /> : expired ? <X className="h-7 w-7" /> : <RefreshCw className="h-6 w-6 animate-spin" />}</span><p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Status pembayaran</p><h1 className="mt-3 text-3xl font-semibold">{paid ? 'Pembayaran berhasil' : expired ? 'Tautan pembayaran berakhir' : 'Menunggu konfirmasi pembayaran'}</h1><p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[#607568]">{paid ? 'Akses kelas sudah aktif dan materi dapat langsung dibuka.' : expired ? 'Buat order baru dari halaman kelas untuk memperoleh tautan pembayaran baru.' : 'Halaman ini memeriksa status secara otomatis. Setelah pembayaran terkonfirmasi, akses kelas akan langsung aktif secara otomatis.'}</p><div className="mx-auto mt-7 max-w-md rounded-[16px] bg-[#f5fbf7] p-5 text-left"><Summary label="Program" value={course?.title || 'Program Al Madraj'} /><Summary label="Total" value={money(order.amount)} strong /><Summary label="Status" value={order.status.toUpperCase()} /></div>{paid && course?.slug && <WhatsAppGroupLinks courseSlug={course.slug} className="mx-auto mt-7 max-w-md" />}<div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">{paid && <button onClick={() => onNavigate('/belajar/' + (course?.slug || ''))} className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Buka ruang belajar <ArrowRight className="h-4 w-4" /></button>}{!paid && !expired && order.checkout_url && <a href={order.checkout_url} className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#006d77] px-5 text-sm font-bold text-white">Kembali ke pembayaran <CreditCard className="h-4 w-4" /></a>}<button onClick={() => void load()} className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#cfe0d5] px-5 text-sm font-bold text-[#315747]"><RefreshCw className="h-4 w-4" />Periksa lagi</button></div></section></div>;
 };
 
 const TransactionsProductionRoute = ({ user }: { user: { id: string } }) => {
@@ -9621,17 +9698,28 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
 };
 
 const CourseAccessLinksCard = ({ links }: { links: CourseAccessLinks | null }) => {
+  const [groupOpened, setGroupOpened] = useState(() => (links?.course_id ? hasOpenedWhatsAppGroup(links.course_id) : false));
+  useEffect(() => { if (links?.course_id) setGroupOpened(hasOpenedWhatsAppGroup(links.course_id)); }, [links?.course_id]);
   if (!links?.whatsapp_group_url && !links?.muqorror_url) return null;
+  const needsGroup = Boolean(links.whatsapp_group_url) && !groupOpened;
   return (
-    <section className="rounded-[22px] border border-[#cfe6d8] bg-[#f3faf6] p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-wider text-[#006d77]">Akses kelas</p>
-      <p className="mt-1 text-sm text-[#4f6d5e]">Gabung grup dan simpan muqorror. Link ini hanya tampil untuk peserta yang aksesnya aktif.</p>
+    <section className={'rounded-[22px] border p-5 sm:p-6 ' + (needsGroup ? 'border-[#1f9d55] bg-[#ecf8f0] ring-4 ring-[#1f9d55]/10' : 'border-[#cfe6d8] bg-[#f3faf6]')}>
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#006d77]">
+        {needsGroup && <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1f9d55] opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#1f9d55]" /></span>}
+        {needsGroup ? 'Langkah pertama: gabung grup WhatsApp' : 'Akses kelas'}
+      </p>
+      <p className="mt-1 text-sm text-[#4f6d5e]">
+        {needsGroup
+          ? 'Info pertemuan dan link rekaman tiap pertemuan dibagikan di grup maddah ini.'
+          : 'Gabung grup dan simpan muqorror. Link ini hanya tampil untuk peserta yang aksesnya aktif.'}
+      </p>
       <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
         {links.whatsapp_group_url && (
           <a
             href={links.whatsapp_group_url}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => { markWhatsAppGroupOpened(links.course_id); setGroupOpened(true); }}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#1f9d55] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#17803f] transition"
           >
             <MessageCircle className="h-4 w-4" />
@@ -9669,6 +9757,8 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
   const [certificateModalOpen, setCertificateModalOpen] = useState(false);
   const [accessLinks, setAccessLinks] = useState<CourseAccessLinks | null>(null);
   const [bundleMembers, setBundleMembers] = useState<Course[]>([]);
+  const [driveSyncTick, setDriveSyncTick] = useState(0);
+  const driveSyncedCourses = useRef<Set<string>>(new Set());
   const lastPersistedAt = useRef<Record<string, number>>({});
   const progressRef = useRef(progressByLesson);
 
@@ -9868,7 +9958,20 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
       }
     };
     load().catch((loadError) => onError(loadError instanceof Error ? loadError.message : 'Materi gagal dimuat.'));
-  }, [path, user.id, onError]);
+  }, [path, user.id, onError, driveSyncTick]);
+
+  // Bimbel: rekaman diunggah PJ ke folder Drive maddah setelah tiap pertemuan. Saat ruang belajar
+  // dibuka, minta server menarik file baru lalu muat ulang daftar materi bila ada perubahan.
+  useEffect(() => {
+    if (!course?.id || accessDenied || course.program_type !== 'Bimbel' || course.is_bundle) return;
+    if (driveSyncedCourses.current.has(course.id)) return;
+    driveSyncedCourses.current.add(course.id);
+    syncDriveRecordings(course.slug)
+      .then((result) => {
+        if (result.added || result.hidden || result.restored) setDriveSyncTick((tick) => tick + 1);
+      })
+      .catch((syncError) => console.warn('Sinkronisasi rekaman Drive gagal:', syncError));
+  }, [course?.id, course?.slug, course?.program_type, course?.is_bundle, accessDenied]);
 
   const persistProgress = async (lesson: Lesson, watchedSeconds: number, durationSeconds: number, completed = false, force = false) => {
     const previous = progressRef.current[lesson.id];
@@ -10254,6 +10357,13 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                     <p className="text-xs sm:text-sm leading-relaxed text-gray-600 max-w-3xl">
                       {activeLessonDetail.description}
                     </p>
+                  )}
+                  {activeLesson && !activeLesson.id.includes('-lesson-') && (
+                    <CopyShareButton
+                      text={recordingShareMessage(course.title, course.slug, [{ id: activeLesson.id, title: activeLessonTitle }])}
+                      label="Salin link materi ini"
+                      className="rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 hover:border-[#006d77] hover:text-[#006d77]"
+                    />
                   )}
                 </div>
 
@@ -11293,6 +11403,63 @@ const CertificateModal = ({
       </div>
     </div>
   );
+};
+
+// Link langsung ke satu materi; santri yang belum login dikembalikan ke materi ini setelah login.
+export const lessonShareUrl = (courseSlug: string, lessonId: string) =>
+  'https://almadraj-edu.com/belajar/' + courseSlug + '?lesson=' + encodeURIComponent(lessonId);
+
+// Pesan siap tempel untuk grup WhatsApp maddah.
+export const recordingShareMessage = (courseTitle: string, courseSlug: string, items: Array<{ id: string; title: string }>) => {
+  const maddah = String(courseTitle || '').split(' · ')[0];
+  if (items.length === 1) {
+    return `🎧 Rekaman ${maddah}\n${items[0].title}\n\nDengarkan di website:\n${lessonShareUrl(courseSlug, items[0].id)}`;
+  }
+  return `🎧 Rekaman baru ${maddah}\n\n` + items.map((item) => `• ${item.title}\n${lessonShareUrl(courseSlug, item.id)}`).join('\n\n');
+};
+
+const CopyShareButton = ({ text, label = 'Salin link', copiedLabel = 'Tersalin', className = '' }: { text: string; label?: string; copiedLabel?: string; className?: string }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 2000);
+        }, () => window.prompt('Salin teks ini:', text));
+      }}
+      className={'inline-flex items-center gap-1.5 cursor-pointer ' + className}
+      title="Salin pesan berisi link untuk dibagikan di grup WhatsApp"
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      <span>{copied ? copiedLabel : label}</span>
+    </button>
+  );
+};
+
+// Ambil id folder dari link folder Google Drive (atau id mentah).
+export const getGoogleDriveFolderId = (value?: string | null): string => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{10,})/) || trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (match) return match[1];
+  return /^[a-zA-Z0-9_-]{10,}$/.test(trimmed) ? trimmed : '';
+};
+
+// Minta server menyinkronkan rekaman Bimbel dari folder Drive maddah ini (lihat api/drive/sync.js).
+export const syncDriveRecordings = async (slug: string, force = false): Promise<{ added: number; hidden?: number; restored?: number; files?: number; skipped?: string; message?: string; lessons?: Array<{ id: string; title: string }> }> => {
+  const { data } = await requireSupabase().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { added: 0, skipped: 'no-session' };
+  const response = await fetch('/api/drive/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ slug, force }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || 'Sinkronisasi rekaman gagal.');
+  return { added: 0, ...result };
 };
 
 // Alamat streaming berkas Drive publik ("siapa saja yang memiliki link") lewat Drive API,
