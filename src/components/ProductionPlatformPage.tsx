@@ -95,6 +95,18 @@ export const isMasterAdmin = (email?: string | null): boolean => {
 };
 
 const money = (amount: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+
+/** Harga coret paket Bimbel: total harga satuan semua maddah di fakultas & tingkat yang sama. 0 bila tidak lebih mahal. */
+const bundleOriginalPrice = (bundle: Course, courses: Course[]) => {
+  if (!bundle.is_bundle) return 0;
+  const total = courses
+    .filter((item) => !item.is_bundle && item.program_type === 'Bimbel' && item.faculty === bundle.faculty && item.tingkat === bundle.tingkat)
+    .reduce((sum, item) => sum + (item.price || 0), 0);
+  return total > bundle.price ? total : 0;
+};
+
+const StrikePrice = ({ amount, className = '' }: { amount: number; className?: string }) =>
+  amount > 0 ? <span className={'mr-1.5 align-middle text-[0.6em] font-semibold line-through opacity-60 ' + className}>{money(amount)}</span> : null;
 const durationToSeconds = (duration: string) => {
   const parts = duration.split(':').map(Number);
   if (parts.some((part) => Number.isNaN(part))) return 0;
@@ -2582,6 +2594,7 @@ const CourseRouteV2 = ({
 
   const isFree = course.price === 0;
   const hasAccess = isFree || enrolled;
+  const originalPrice = bundleOriginalPrice(course, bimbelSiblings);
 
   const kitabName = detail?.kitabName || course.title;
   const authorName = detail?.authorName || 'Ulama Ahlussunnah wal Jama\'ah';
@@ -2818,6 +2831,7 @@ const CourseRouteV2 = ({
                   {isFree ? 'Format Program' : 'Investasi Belajar'}
                 </p>
                 <p className="text-lg font-extrabold text-white">
+                  {!isFree && <StrikePrice amount={originalPrice} />}
                   {isFree ? 'Gratis (Wakaf)' : money(course.price)}
                 </p>
               </div>
@@ -2852,7 +2866,11 @@ const CourseRouteV2 = ({
                 <p className="text-[11px] font-bold uppercase tracking-wider text-[#b45309]">Lebih hemat</p>
                 <h2 className="mt-1 text-lg font-bold text-[#143428]">{bundle.title}</h2>
                 <p className="mt-1 text-sm text-[#5c7768]">
-                  Ambil semua {memberCount} maddah {course.faculty} Tingkat {course.tingkat} sekaligus seharga {money(bundle.price)}.
+                  Ambil semua {memberCount} maddah {course.faculty} Tingkat {course.tingkat} sekaligus seharga{' '}
+                  {bundleOriginalPrice(bundle, [course, ...bimbelSiblings]) > 0 && (
+                    <span className="line-through opacity-70">{money(bundleOriginalPrice(bundle, [course, ...bimbelSiblings]))}</span>
+                  )}{' '}
+                  <strong className="text-[#b45309]">{money(bundle.price)}</strong>.
                 </p>
               </div>
               <button
@@ -3230,6 +3248,7 @@ const CourseRouteV2 = ({
                   {isFree ? 'Format Akses' : 'Investasi Belajar'}
                 </p>
                 <p className="mt-1 text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  {!isFree && <StrikePrice amount={originalPrice} />}
                   {isFree ? 'Gratis' : money(course.price)}
                 </p>
                 <p className="mt-1 text-xs text-[#cbe9da]">
@@ -3342,6 +3361,7 @@ const CourseRouteV2 = ({
               {isFree ? 'Akses Terbuka' : 'Investasi'}
             </p>
             <p className="text-lg font-bold text-[#006d77]">
+              {!isFree && <StrikePrice amount={originalPrice} className="text-[#698876]" />}
               {isFree ? 'Gratis' : money(course.price)}
             </p>
           </div>
@@ -4177,6 +4197,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
                 key={course.id}
                 course={course}
                 isEnrolled={enrolledSlugs.includes(course.slug)}
+                originalPrice={bundleOriginalPrice(course, courses)}
                 onOpenDetail={() => setSelectedDetailCourse(course)}
                 onOpenCoursePage={() => onNavigate('/kelas/' + course.slug)}
                 onDirectBuy={() => {
@@ -4239,6 +4260,7 @@ const CatalogRoute = ({ profile, onNavigate, onError, onLogout }: { profile: Pro
           <CatalogDetailModal
             course={selectedDetailCourse}
             isEnrolled={enrolledSlugs.includes(selectedDetailCourse.slug)}
+            originalPrice={bundleOriginalPrice(selectedDetailCourse, courses)}
             onClose={() => setSelectedDetailCourse(null)}
             onOpenFullPage={() => {
               const slug = selectedDetailCourse.slug;
@@ -4267,12 +4289,14 @@ const CatalogCourseCard = ({
   onOpenDetail,
   onOpenCoursePage,
   onDirectBuy,
+  originalPrice = 0,
 }: {
   course: Course;
   isEnrolled?: boolean;
   onOpenDetail: () => void;
   onOpenCoursePage: () => void;
   onDirectBuy: () => void;
+  originalPrice?: number;
 }) => {
   const theme = getFacultyVisual(course.faculty);
   const detail = getCourseDetail(course.slug);
@@ -4364,6 +4388,9 @@ const CatalogCourseCard = ({
             <p className="text-[8.5px] sm:text-[10px] font-medium uppercase tracking-wider text-[#789585]">
               {isFree ? 'AKSES' : 'INVESTASI'}
             </p>
+            {!isFree && originalPrice > 0 && (
+              <p className="text-[10px] sm:text-xs font-semibold text-[#93ada0] line-through">{money(originalPrice)}</p>
+            )}
             <p className="mt-0.5 text-xs sm:text-xl font-extrabold tracking-tight text-[#006d77] truncate">
               {isFree ? 'Gratis' : money(course.price)}
             </p>
@@ -4396,12 +4423,14 @@ const CatalogDetailModal = ({
   onClose,
   onOpenFullPage,
   onEnroll,
+  originalPrice = 0,
 }: {
   course: Course;
   isEnrolled?: boolean;
   onClose: () => void;
   onOpenFullPage: () => void;
   onEnroll: () => void;
+  originalPrice?: number;
 }) => {
   const theme = getFacultyVisual(course.faculty);
   const detail = getCourseDetail(course.slug);
@@ -4747,6 +4776,7 @@ const CatalogDetailModal = ({
               {course.price === 0 ? 'Format Akses' : 'Investasi Program'}
             </p>
             <p className="text-xl font-bold text-[#006d77]">
+              {course.price !== 0 && <StrikePrice amount={originalPrice} className="text-[#7a9586]" />}
               {course.price === 0 ? 'Gratis' : money(course.price)}
             </p>
           </div>
