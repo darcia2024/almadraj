@@ -101,7 +101,8 @@ export const landingGalleryPhotos: GalleryPhoto[] = [
   galleryPhotos[3], // Silaturahmi Pembelajar Masisir (Komunitas)
 ];
 
-export const getCourseCoverImage = (idOrTitle: string, faculty?: string): string => {
+export const getCourseCoverImage = (idOrTitle: string, faculty?: string, customCover?: string): string => {
+  if (customCover?.trim()) return customCover.trim();
   const norm = `${idOrTitle || ''} ${faculty || ''}`.toLowerCase();
   // Bimbel maddah use real halaqah photos instead of a Dars kitab cover.
   if (norm.startsWith('bimbel-')) {

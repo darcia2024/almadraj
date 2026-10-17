@@ -178,7 +178,7 @@ export const WebsitePage: React.FC = () => {
     let active = true;
     supabase
       .from('courses')
-      .select('slug,program_type,faculty,title,summary,tutor,duration,price')
+      .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -194,7 +194,7 @@ export const WebsitePage: React.FC = () => {
           lessons: course.duration,
           price: course.price === 0 ? 'Gratis' : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(course.price),
           tone: ['bg-[#e4f8ee] text-[#0f8f6f]', 'bg-[#edf9f5] text-[#168b77]', 'bg-[#e9f7f0] text-[#167a62]'][index % 3],
-          thumbnail: getCourseCoverImage(course.slug || course.title, course.faculty),
+          thumbnail: getCourseCoverImage(course.slug || course.title, course.faculty, course.thumbnail_url ?? course.thumbnail),
         })));
       });
     return () => { active = false; };

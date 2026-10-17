@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { getCourseCoverImage } from '../data/galleryData';
+import { CourseCoverField } from './CourseCoverField';
 import { InstallAppButton } from '../pwa/PwaLayer';
 import { MayarCheckoutModal, MayarCheckoutSession } from './MayarCheckoutModal';
 import { WhatsAppGroupLinks, markWhatsAppGroupOpened, hasOpenedWhatsAppGroup } from './WhatsAppGroupLinks';
@@ -1139,6 +1140,7 @@ const DashboardRoute = ({
           slug: e.course.slug,
           title: e.course.title,
           faculty: e.course.faculty,
+          thumbnail_url: e.course.thumbnail_url ?? e.course.thumbnail,
           tutor: getCourseTutorName(e.course.slug, e.course.tutor),
           isEnrolled: true,
           progress: pct,
@@ -1153,6 +1155,7 @@ const DashboardRoute = ({
           slug: c.slug,
           title: c.title,
           faculty: c.faculty,
+          thumbnail_url: c.thumbnail_url ?? c.thumbnail,
           tutor: getCourseTutorName(c.slug, c.tutor),
           isEnrolled: false,
           progress: 0,
@@ -1951,7 +1954,7 @@ const DashboardRoute = ({
                       {/* Thumbnail Container with exact ratio */}
                       <div className="relative w-full overflow-hidden rounded-[12px] sm:rounded-[16px] bg-[#eef4f0]" style={{ aspectRatio: '116501 / 65024' }}>
                         <img
-                          src={getCourseCoverImage(c.slug, c.faculty)}
+                          src={getCourseCoverImage(c.slug, c.faculty, c.thumbnail_url)}
                           alt={c.title}
                           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                           loading="lazy"
@@ -4285,9 +4288,9 @@ const CatalogCourseCard = ({
         className={`relative flex w-full flex-col justify-between overflow-hidden bg-gradient-to-br ${theme.bannerGradient} text-white`}
         style={{ aspectRatio: '116501 / 65024' }}
       >
-        {(getCourseCoverImage(course.slug || course.title, course.faculty) || course.thumbnail || course.thumbnail_url) ? (
+        {getCourseCoverImage(course.slug || course.title, course.faculty, course.thumbnail_url ?? course.thumbnail) ? (
           <img
-            src={getCourseCoverImage(course.slug || course.title, course.faculty) || course.thumbnail || course.thumbnail_url}
+            src={getCourseCoverImage(course.slug || course.title, course.faculty, course.thumbnail_url ?? course.thumbnail)}
             alt={course.title}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -4990,6 +4993,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   type CourseModalTab = 'identity' | 'media' | 'coordinator';
 
   type CourseDraft = {
+    thumbnail_url?: string;
     id?: string;
     slug: string;
     title: string;
@@ -5039,6 +5043,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [progressRows, setProgressRows] = useState<ProductionAdminProgress[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null);
+  const [courseCoverFile, setCourseCoverFile] = useState<File | null>(null);
   const [driveSyncing, setDriveSyncing] = useState(false);
   const [driveSyncStatus, setDriveSyncStatus] = useState('');
   const [driveSyncNewLessons, setDriveSyncNewLessons] = useState<Array<{ id: string; title: string }>>([]);
@@ -5437,9 +5442,11 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const startCourse = (course?: ProductionAdminCourse, initialModalTab: CourseModalTab = 'identity') => {
     setCourseModalTab(initialModalTab);
     const initialType: ProgramType = course ? (course.program_type || 'Dars') : 'Dars';
+    setCourseCoverFile(null);
     const isDars = initialType === 'Dars';
     setCourseDraft(course ? {
       id: course.id,
+      thumbnail_url: course.thumbnail_url ?? course.thumbnail ?? '',
       slug: course.slug,
       title: course.title,
       program_type: initialType,
@@ -5555,9 +5562,22 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
     setSaving(true);
     try {
       const finalProgramType = courseDraft.program_type || 'Dars';
+      let thumbnailUrl = courseDraft.thumbnail_url || '';
+      if (courseCoverFile) {
+        const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[courseCoverFile.type];
+        if (!extension || courseCoverFile.size > 5 * 1024 * 1024) throw new Error('Cover harus berupa JPG, PNG, atau WebP maksimal 5 MB.');
+        const storage = requireSupabase().storage.from('course-covers');
+        const path = `${courseDraft.id || normalizedSlug}/${crypto.randomUUID()}.${extension}`;
+        const upload = await storage.upload(path, courseCoverFile, { contentType: courseCoverFile.type, upsert: false });
+        if (upload.error) throw new Error('Cover gagal diunggah: ' + upload.error.message);
+        thumbnailUrl = storage.getPublicUrl(path).data.publicUrl;
+        setCourseDraft((draft) => draft ? { ...draft, thumbnail_url: thumbnailUrl } : draft);
+        setCourseCoverFile(null);
+      }
       const finalMediaFormat = finalProgramType === 'Dars' ? 'video' : (courseDraft.media_format || 'audio');
 
       const fullPayload = {
+        thumbnail_url: thumbnailUrl,
         slug: normalizedSlug,
         title: courseDraft.title.trim(),
         program_type: finalProgramType,
@@ -5585,6 +5605,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
       if (result.error) {
         const basePayload = {
+          thumbnail_url: thumbnailUrl,
           slug: normalizedSlug,
           title: courseDraft.title.trim(),
           program_type: courseDraft.program_type || 'Dars',
@@ -5970,7 +5991,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                       <div key={course.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-3.5 min-w-0">
                           <img
-                            src={getCourseCoverImage(course.slug, course.faculty)}
+                            src={getCourseCoverImage(course.slug, course.faculty, course.thumbnail_url ?? course.thumbnail)}
                             alt=""
                             className="h-12 w-20 shrink-0 rounded-lg object-cover border border-[#e2ece5]"
                           />
@@ -6094,7 +6115,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                       >
                         <div className="flex items-start gap-3">
                           <img
-                            src={getCourseCoverImage(c.slug, c.faculty)}
+                            src={getCourseCoverImage(c.slug, c.faculty, c.thumbnail_url ?? c.thumbnail)}
                             alt=""
                             className="h-12 w-20 shrink-0 rounded-lg object-cover border border-[#dce9df]"
                           />
@@ -6157,7 +6178,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       <div className="flex items-start gap-4">
                         <img
-                          src={getCourseCoverImage(selectedCourse.slug, selectedCourse.faculty)}
+                          src={getCourseCoverImage(selectedCourse.slug, selectedCourse.faculty, selectedCourse.thumbnail_url ?? selectedCourse.thumbnail)}
                           alt=""
                           className="h-16 w-28 shrink-0 rounded-xl object-cover border border-[#dce9df] shadow-xs"
                         />
@@ -7941,6 +7962,13 @@ create policy books_admin_manage on public.books for all to authenticated using 
               {/* TAB A: Identitas & Akademik */}
               {courseModalTab === 'identity' && (
                 <div className="space-y-4">
+                  <CourseCoverField
+                    src={courseDraft.thumbnail_url || getCourseCoverImage(courseDraft.slug || courseDraft.title, courseDraft.faculty)}
+                    file={courseCoverFile}
+                    disabled={saving}
+                    onChange={setCourseCoverFile}
+                    onReset={() => { setCourseCoverFile(null); setCourseDraft({ ...courseDraft, thumbnail_url: '' }); }}
+                  />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <ProductionAdminField
                       label="Judul Maddah / Kelas"
@@ -9626,7 +9654,7 @@ const LearningHubRoute = ({ user, profile, onNavigate, onLogout }: { user: { id:
                       style={{ aspectRatio: '116501 / 65024' }}
                     >
                       <img
-                        src={(course as any).thumbnail_url || (course as any).thumbnail || getCourseCoverImage(course.slug || course.title, course.faculty)}
+                        src={getCourseCoverImage(course.slug || course.title, course.faculty, course.thumbnail_url ?? course.thumbnail)}
                         alt={course.title}
                         loading="lazy"
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -10786,7 +10814,7 @@ const LearningRouteWithTracking = ({ path, user, profile, onNavigate, onError, o
                 const isVideo = lesson.content_type === 'video';
                 const isDrive = Boolean(lesson.content_url && getGoogleDriveEmbedUrl(lesson.content_url));
                 const isYt = Boolean(lesson.content_url && youtubeVideoId(lesson.content_url));
-                const courseCover = getCourseCoverImage(course.slug, course.faculty);
+                const courseCover = getCourseCoverImage(course.slug, course.faculty, course.thumbnail_url ?? course.thumbnail);
                 const lessonTitle = youtubeMetadata?.title || lesson.title;
                 const thumbnailUrl = youtubeMetadata?.thumbnailUrl || youtubeThumbnailUrl(lesson.content_url || '') || (isAudio ? courseCover : '');
 
