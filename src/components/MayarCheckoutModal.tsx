@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
-import { ArrowRight, CheckCircle2, Clock, ExternalLink, Loader2, LockKeyhole, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Clock, ExternalLink, Loader2, LockKeyhole, X } from 'lucide-react';
 import { requireSupabase } from '../lib/supabase';
 import { WhatsAppGroupLinks } from './WhatsAppGroupLinks';
 
@@ -20,6 +20,7 @@ export const PAYMENT_RETURN_MESSAGE = 'almadraj:payment-return';
 type OrderStatus = 'pending' | 'paid' | 'expired' | 'cancelled' | 'failed' | string;
 
 const POLL_MS = 4000;
+const HELP_DELAY_MS = 6000;
 
 const money = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
@@ -34,6 +35,8 @@ export const MayarCheckoutModal = ({
   onNavigate: (path: string) => void;
 }) => {
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [status, setStatus] = useState<OrderStatus>('pending');
   const statusRef = useRef<OrderStatus>('pending');
 
@@ -71,6 +74,13 @@ export const MayarCheckoutModal = ({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [checkStatus]);
+
+  // Iframe lintas-origin tidak memberi tahu bila gagal dimuat (onLoad tetap terpanggil untuk halaman error),
+  // jadi tampilkan petunjuk setelah beberapa detik untuk jaga-jaga.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowHelp(true), HELP_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Kunci scroll halaman di belakang popup, dan Esc untuk menutup.
   useEffect(() => {
@@ -194,6 +204,32 @@ export const MayarCheckoutModal = ({
               </div>
             )}
           </div>
+
+          {/* Petunjuk bila halaman Mayar tidak muncul */}
+          {!paid && !expired && showHelp && (
+            <div className="border-t border-[#f1e2c4] bg-[#fffaf0] px-5 py-2.5 text-[12px] text-[#6b5a3a]">
+              <button
+                type="button"
+                onClick={() => setHelpOpen((open) => !open)}
+                aria-expanded={helpOpen}
+                className="flex w-full items-center justify-between gap-2 text-left font-semibold text-[#8a5a12]"
+              >
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  Halaman pembayaran tidak muncul?
+                </span>
+                <ChevronDown className={'h-4 w-4 shrink-0 transition-transform ' + (helpOpen ? 'rotate-180' : '')} />
+              </button>
+              {helpOpen && (
+                <ol className="mt-2 list-decimal space-y-1 pl-5 leading-5">
+                  <li>Tekan <strong>Buka di tab baru</strong> di bawah.</li>
+                  <li>Ganti jaringan: coba data seluler bila memakai Wi-Fi, atau sebaliknya.</li>
+                  <li>Matikan VPN, aplikasi pemblokir iklan, atau <strong>Private DNS</strong> (Pengaturan → Koneksi → Private DNS → Nonaktif).</li>
+                  <li>Masih gagal? Hubungi admin, sertakan tangkapan layar ini.</li>
+                </ol>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           {!paid && !expired && (
