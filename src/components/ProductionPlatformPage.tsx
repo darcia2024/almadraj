@@ -40,6 +40,8 @@ import {
   setStoredBookstoreContact,
   checkBooksTableStatus
 } from '../data/booksData';
+import { ManualEnrollPanel, MaddahParticipantsPanel } from './AdminParticipantPanels';
+import { RegistrationRequirements } from './RegistrationProofs';
 
 type ProgramType = 'Dars' | 'Bimbel';
 type Course = {
@@ -3553,6 +3555,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
   const [hasActiveAccess, setHasActiveAccess] = useState(false);
   const [mayarError, setMayarError] = useState<string | null>(null);
   const [checkoutSession, setCheckoutSession] = useState<MayarCheckoutSession | null>(null);
+  const [proofsOk, setProofsOk] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -3614,6 +3617,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
 
   const handleMayarCheckout = async () => {
     if (!course) return;
+    if (!proofsOk) { onError('Lengkapi syarat pendaftaran (bukti share story & follow Instagram) terlebih dahulu.'); return; }
     setSubmitting(true);
     onError('');
     setMayarError(null);
@@ -3657,6 +3661,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
 
   const handleWhatsAppConfirmation = async () => {
     if (!course) return;
+    if (!proofsOk) { onError('Lengkapi syarat pendaftaran (bukti share story & follow Instagram) terlebih dahulu.'); return; }
     try {
       const sb = requireSupabase();
       await sb.rpc('create_lms_order', { p_course_slug: course.slug });
@@ -3764,6 +3769,7 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
             </div>
           ) : (
             <div className="mt-4 space-y-5">
+              {currentUser?.id && <RegistrationRequirements userId={currentUser.id} onCompleteChange={setProofsOk} />}
               {/* Primary Option: WhatsApp Confirmation (Fastest & Guaranteed) */}
               <div className="rounded-xl border border-[#83c5be]/30 bg-white/5 p-4 backdrop-blur-xs">
                 <div className="flex items-center gap-2 text-[#83c5be] font-bold text-xs uppercase tracking-wider">
@@ -3782,7 +3788,8 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
                 <button
                   type="button"
                   onClick={handleWhatsAppConfirmation}
-                  className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#20bd5a] active:scale-95 transition cursor-pointer"
+                  disabled={!proofsOk}
+                  className="mt-4 flex min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-40 items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#20bd5a] active:scale-95 transition cursor-pointer"
                 >
                   <MessageCircle className="h-4 w-4" />
                   <span>Daftar &amp; Konfirmasi via WhatsApp</span>
@@ -3822,9 +3829,9 @@ const CheckoutRoute = ({ path, onNavigate, onError }: { path: string; onNavigate
 
                 <button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || !proofsOk}
                   onClick={handleMayarCheckout}
-                  className="mt-3.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#006d77] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#00545c] active:scale-95 transition cursor-pointer"
+                  className="mt-3.5 flex min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-40 items-center justify-center gap-2 rounded-full bg-[#006d77] px-4 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#00545c] active:scale-95 transition cursor-pointer"
                 >
                   <CreditCard className="h-4 w-4 text-[#83c5be]" />
                   <span>{submitting ? 'Menghubungkan ke Mayar...' : 'Bayar via Mayar (QRIS / VA / E-Wallet)'}</span>
@@ -5014,7 +5021,7 @@ export default ProductionPlatformPage;
 type ProductionAdminCourse = Course & { is_published: boolean; created_at: string };
 type ProductionAdminLesson = Lesson & { is_published: boolean };
 type ProductionAdminProfile = { id: string; full_name: string; whatsapp: string; role: 'student' | 'admin'; email?: string; created_at?: string };
-type ProductionAdminEnrollment = { id: string; user_id: string; course_id: string; status: 'pending' | 'active' | 'cancelled'; created_at: string; activated_at: string | null; profiles?: ProductionAdminProfile; courses?: { title: string; slug: string } };
+type ProductionAdminEnrollment = { id: string; user_id: string; course_id: string; status: 'pending' | 'active' | 'cancelled'; created_at: string; activated_at: string | null; source?: string; payment_note?: string; profiles?: ProductionAdminProfile; courses?: { title: string; slug: string } };
 type ProductionAdminOrder = { id: string; amount: number; status: string; provider: string; created_at: string; profiles?: { full_name: string }; courses?: { title: string } };
 type ProductionAdminProgress = LessonProgress & { user_id: string };
 
@@ -5086,7 +5093,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
   const [coordinatorSearch, setCoordinatorSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'admin' | 'student'>('all');
-  const [accessView, setAccessView] = useState<'users' | 'enrollments'>('users');
+  const [accessView, setAccessView] = useState<'users' | 'enrollments' | 'maddah'>('users');
   const [orderSearch, setOrderSearch] = useState('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [testimonialsList, setTestimonialsList] = useState<TestimonialItem[]>(() => getStoredTestimonials());
@@ -5156,7 +5163,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
           return res;
         }),
         sb.from('profiles').select('id,full_name,whatsapp,role').order('created_at', { ascending: false }),
-        sb.from('enrollments').select('id,user_id,course_id,status,created_at,activated_at,profiles(id,full_name,whatsapp,role),courses(title,slug)').order('created_at', { ascending: false }),
+        sb.from('enrollments').select('*,profiles(id,full_name,whatsapp,role),courses(title,slug)').order('created_at', { ascending: false }),
         sb.from('orders').select('id,amount,status,provider,created_at,profiles(full_name),courses(title)').order('created_at', { ascending: false }),
         sb.from('lesson_progress').select('user_id,lesson_id,watched_seconds,duration_seconds,completed_at'),
       ]);
@@ -6599,6 +6606,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                     >
                       Enrollment ({enrollments.length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setAccessView('maddah')}
+                      className={'rounded-full px-3.5 py-1.5 text-xs font-bold transition cursor-pointer ' + (accessView === 'maddah' ? 'bg-[#006d77] text-white' : 'bg-white border border-[#cfe0d5] text-[#556e61]')}
+                    >
+                      Peserta per Maddah
+                    </button>
                   </div>
                 </div>
 
@@ -6634,6 +6648,19 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </div>
                 )}
               </div>
+
+              <ManualEnrollPanel
+                profiles={profiles}
+                courses={courses}
+                enrollments={enrollments}
+                onChanged={loadData}
+                onError={onError}
+                recordAudit={recordAudit}
+              />
+
+              {accessView === 'maddah' && (
+                <MaddahParticipantsPanel profiles={profiles} courses={courses} enrollments={enrollments} />
+              )}
 
               {/* Users View */}
               {accessView === 'users' && (
@@ -9542,7 +9569,7 @@ create policy books_admin_manage on public.books for all to authenticated using 
   );
 };
 
-const ProductionAdminForm = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <section className="rounded-[18px] border border-[#bcd8c4] bg-[#f3faf5] p-5"><div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">{title}</h2>{title.toLowerCase().includes('materi') && <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-[#607568]">Upload file materi<input type="file" accept="video/*,application/pdf,.txt,.md" onChange={(event) => window.dispatchEvent(new CustomEvent<File | null>('al-madraj-content-file', { detail: event.target.files?.[0] || null }))} className="max-w-[220px] text-xs" /></label>}</div><button onClick={onClose} aria-label="Tutup form" title="Tutup form" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568]"><X className="h-4 w-4" /></button></div>{children}</section>;
+const ProductionAdminForm = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => <section className="rounded-[18px] border border-[#bcd8c4] bg-[#f3faf5] p-5"><div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">{title}</h2>{title.toLowerCase().includes('materi') && <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-[#607568]">Upload file materi<input type="file" accept="video/*,audio/*,.mp3,.m4a,.wav,.ogg,application/pdf,.txt,.md" onChange={(event) => window.dispatchEvent(new CustomEvent<File | null>('al-madraj-content-file', { detail: event.target.files?.[0] || null }))} className="max-w-[220px] text-xs" /></label>}</div><button onClick={onClose} aria-label="Tutup form" title="Tutup form" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#cfe0d5] text-[#607568]"><X className="h-4 w-4" /></button></div>{children}</section>;
 const ProductionAdminField = ({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string }) => <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#006d77]" /></label>; const ProductionAdminSelect = ({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: string[] }) => <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="min-h-11 w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#006d77]">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
 const ProductionAdminStat = ({ label, value, detail }: { label: string; value: string; detail: string }) => <section className="rounded-[18px] border border-[#d4e1d8] bg-white p-4"><p className="text-xs text-[#819289]">{label}</p><p className="mt-2 text-2xl font-semibold text-[#006d77]">{value}</p><p className="mt-1 text-xs text-[#9aa9a0]">{detail}</p></section>;
 
