@@ -40,8 +40,8 @@ import {
   setStoredBookstoreContact,
   checkBooksTableStatus
 } from '../data/booksData';
-import { ManualEnrollPanel, MaddahParticipantsPanel } from './AdminParticipantPanels';
-import { RegistrationRequirements } from './RegistrationProofs';
+import { EnrollmentListPanel, ManualEnrollPanel, MaddahParticipantsPanel } from './AdminParticipantPanels';
+import { RegistrationProofsModal, RegistrationRequirements, hasCompleteProofs } from './RegistrationProofs';
 
 type ProgramType = 'Dars' | 'Bimbel';
 type Course = {
@@ -2462,6 +2462,7 @@ const CourseRouteV2 = ({
   const [checkoutError, setCheckoutError] = useState('');
   const checkoutAttempted = useRef(false);
   const [checkoutSession, setCheckoutSession] = useState<MayarCheckoutSession | null>(null);
+  const [proofGateOpen, setProofGateOpen] = useState(false);
   const [previewVideo, setPreviewVideo] = useState<{ id: string; title: string; youtubeId?: string } | null>(null);
   const [bimbelSiblings, setBimbelSiblings] = useState<Course[]>([]);
   const [ownedSiblingIds, setOwnedSiblingIds] = useState<string[]>([]);
@@ -2529,6 +2530,12 @@ const CourseRouteV2 = ({
     setCheckoutError('');
 
     try {
+      if (!(await hasCompleteProofs(user.id))) {
+        setProofGateOpen(true);
+        setCheckoutLoading(false);
+        return;
+      }
+
       const sb = requireSupabase();
       const orderResult = await sb.rpc('create_lms_order', { p_course_slug: course.slug });
       if (orderResult.error) throw new Error(orderResult.error.message);
@@ -2659,6 +2666,14 @@ const CourseRouteV2 = ({
   return (
     <BackendShell profile={profile} onNavigate={onNavigate} onLogout={onLogout}>
       {checkoutSession && <MayarCheckoutModal session={checkoutSession} onClose={() => setCheckoutSession(null)} onNavigate={onNavigate} />}
+      {proofGateOpen && user && (
+        <RegistrationProofsModal
+          userId={user.id}
+          courseTitle={course.title}
+          onClose={() => setProofGateOpen(false)}
+          onContinue={() => { setProofGateOpen(false); void startMayarCheckout(); }}
+        />
+      )}
       <div className="space-y-8 pb-20 lg:pb-12">
         {checkoutError && (
           <div role="alert" className="flex items-start justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -5212,8 +5227,10 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       setRegisteredUsers(loadedUsers);
       setProfiles(loadedUsers);
 
-      setEnrollments((enrollmentResult.data || []).map((item: any) => ({ ...item, profiles: item.profiles?.[0], courses: item.courses?.[0] })) as ProductionAdminEnrollment[]);
-      setOrders((orderResult.data || []).map((item: any) => ({ ...item, profiles: item.profiles?.[0], courses: item.courses?.[0] })) as ProductionAdminOrder[]);
+      // Relasi many-to-one dikirim Supabase sebagai objek, bukan array.
+      const embedOne = (value: any) => (Array.isArray(value) ? value[0] : value);
+      setEnrollments((enrollmentResult.data || []).map((item: any) => ({ ...item, profiles: embedOne(item.profiles), courses: embedOne(item.courses) })) as ProductionAdminEnrollment[]);
+      setOrders((orderResult.data || []).map((item: any) => ({ ...item, profiles: embedOne(item.profiles), courses: embedOne(item.courses) })) as ProductionAdminOrder[]);
       setProgressRows((progressResult.data || []) as ProductionAdminProgress[]);
       loadTestimonials().then((items) => { if (items && items.length) setTestimonialsList(items); }).catch(() => null);
       checkTestimonialsTableStatus().then(setDbSyncStatus);
@@ -5886,7 +5903,7 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
         })}
       </nav>
 
-      {loading ? (
+      {loading && !courses.length ? (
         <div className="rounded-2xl border border-[#dce9df] bg-white p-12 text-center text-sm text-[#607568]">
           <RefreshCw className="mx-auto h-6 w-6 animate-spin text-[#006d77] mb-3" />
           Memuat data operasional Al Madraj...
@@ -6724,56 +6741,15 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
 
               {/* Enrollments View */}
               {accessView === 'enrollments' && (
-                <div className="rounded-2xl border border-[#dce9df] bg-white shadow-xs overflow-hidden">
-                  <div className="divide-y divide-[#edf4ef]">
-                    {enrollments.map((e) => (
-                      <div key={e.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#f9fbfa] transition">
-                        <div>
-                          <p className="text-xs sm:text-sm font-bold text-[#112d22]">
-                            {e.profiles?.full_name || e.user_id}
-                          </p>
-                          <p className="text-[11px] text-[#71877b]">
-                            Kelas: <strong>{e.courses?.title || e.course_id}</strong> · Status: <span className="font-semibold uppercase">{e.status}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          {e.status !== 'active' && (
-                            <button
-                              type="button"
-                              onClick={() => void updateAccess(e, 'active')}
-                              className="rounded-full bg-[#006d77] px-3 py-1 text-xs font-bold text-white hover:bg-[#00545c] cursor-pointer"
-                            >
-                              Aktifkan
-                            </button>
-                          )}
-                          {e.status === 'active' && (
-                            <button
-                              type="button"
-                              onClick={() => void updateAccess(e, 'cancelled')}
-                              className="rounded-full border border-[#efd2c8] px-3 py-1 text-xs font-semibold text-[#b36d4c] hover:bg-red-50 cursor-pointer"
-                            >
-                              Cabut Akses
-                            </button>
-                          )}
-                          {e.status === 'cancelled' && (
-                            <button
-                              type="button"
-                              onClick={() => void updateAccess(e, 'active')}
-                              className="rounded-full border border-[#cfe0d5] px-3 py-1 text-xs font-semibold text-[#006d77] hover:bg-emerald-50 cursor-pointer"
-                            >
-                              Pulihkan
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {!enrollments.length && (
-                      <div className="p-8 text-center text-xs text-[#71877b]">
-                        Belum ada enrollment peserta.
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <EnrollmentListPanel
+                  profiles={profiles}
+                  courses={courses}
+                  enrollments={enrollments}
+                  onUpdateAccess={(id, status) => {
+                    const target = enrollments.find((e) => e.id === id);
+                    if (target) void updateAccess(target, status);
+                  }}
+                />
               )}
             </div>
           )}

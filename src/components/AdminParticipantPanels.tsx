@@ -5,7 +5,8 @@ import { ProofLinks, RegistrationProof } from './RegistrationProofs';
 
 type PanelProfile = { id: string; full_name: string; whatsapp: string; email?: string };
 type PanelCourse = { id: string; title: string; faculty: string; is_published: boolean; is_bundle?: boolean };
-type PanelEnrollment = { id: string; user_id: string; course_id: string; status: 'pending' | 'active' | 'cancelled'; source?: string; payment_note?: string; activated_at?: string | null };
+type PanelStatus = 'pending' | 'active' | 'cancelled';
+type PanelEnrollment = { id: string; user_id: string; course_id: string; status: PanelStatus; source?: string; payment_note?: string; activated_at?: string | null; created_at?: string; profiles?: { full_name?: string; whatsapp?: string } | null; courses?: { title?: string } | null };
 
 type Common = {
   profiles: PanelProfile[];
@@ -16,13 +17,138 @@ type Common = {
   recordAudit: (action: string, entityType: string, entityId?: string, metadata?: Record<string, unknown>) => Promise<void>;
 };
 
-const inputClass = 'min-h-10 w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-sm outline-none focus:border-[#006d77]';
+const inputClass = 'min-h-10 w-full rounded-xl border border-[#cbded0] bg-white px-3 py-2 text-sm text-[#163528] outline-none focus:border-[#006d77]';
 
 const waLink = (raw: string) => {
   let phone = (raw || '').replace(/\D/g, '');
   if (!phone) return '';
   if (phone.startsWith('0')) phone = '62' + phone.slice(1);
   return 'https://wa.me/' + phone;
+};
+
+const STATUS_META: Record<PanelStatus, { label: string; badge: string }> = {
+  active: { label: 'Aktif', badge: 'bg-emerald-50 text-emerald-700' },
+  pending: { label: 'Menunggu', badge: 'bg-amber-50 text-amber-700' },
+  cancelled: { label: 'Dicabut', badge: 'bg-gray-100 text-gray-600' },
+};
+const ENROLLMENT_PAGE_SIZE = 50;
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+/** Daftar enrollment yang terbaca: nama peserta + judul kelas, dengan pencarian dan filter. */
+export const EnrollmentListPanel = ({ profiles, courses, enrollments, onUpdateAccess }: Pick<Common, 'profiles' | 'courses' | 'enrollments'> & { onUpdateAccess: (id: string, status: PanelStatus) => void }) => {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | PanelStatus>('all');
+  const [courseId, setCourseId] = useState('');
+  const [visible, setVisible] = useState(ENROLLMENT_PAGE_SIZE);
+
+  const rows = useMemo(() => {
+    const profileById = new Map(profiles.map((p) => [p.id, p]));
+    const courseById = new Map(courses.map((c) => [c.id, c]));
+    return enrollments.map((e) => {
+      const p = profileById.get(e.user_id);
+      return {
+        e,
+        name: p?.full_name || e.profiles?.full_name || '',
+        email: p?.email || '',
+        whatsapp: p?.whatsapp || e.profiles?.whatsapp || '',
+        title: e.courses?.title || courseById.get(e.course_id)?.title || '',
+      };
+    });
+  }, [enrollments, profiles, courses]);
+
+  const scoped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter(({ e, name, email, whatsapp, title }) =>
+      (!courseId || e.course_id === courseId) &&
+      (!q || `${name} ${email} ${whatsapp} ${title}`.toLowerCase().includes(q)));
+  }, [rows, search, courseId]);
+
+  const filtered = statusFilter === 'all' ? scoped : scoped.filter(({ e }) => e.status === statusFilter);
+  const countOf = (status: PanelStatus) => scoped.filter(({ e }) => e.status === status).length;
+
+  useEffect(() => { setVisible(ENROLLMENT_PAGE_SIZE); }, [search, statusFilter, courseId]);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-2xl border border-[#dce9df] bg-white p-4 shadow-xs sm:p-5">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8aa192]" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama, email, WhatsApp, atau kelas..." className={inputClass + ' pl-8'} />
+          </div>
+          <select value={courseId} onChange={(e) => setCourseId(e.target.value)} aria-label="Filter kelas" className={inputClass}>
+            <option value="">Semua maddah / kelas</option>
+            {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {[
+            { id: 'all' as const, label: `Semua (${scoped.length})` },
+            { id: 'active' as const, label: `Aktif (${countOf('active')})` },
+            { id: 'pending' as const, label: `Menunggu (${countOf('pending')})` },
+            { id: 'cancelled' as const, label: `Dicabut (${countOf('cancelled')})` },
+          ].map((item) => (
+            <button key={item.id} type="button" onClick={() => setStatusFilter(item.id)} className={'rounded-full px-3 py-1 font-semibold transition cursor-pointer ' + (statusFilter === item.id ? 'bg-[#006d77] text-white' : 'bg-[#f1f6f3] text-[#556e61] hover:bg-[#e4eee8]')}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-[#dce9df] bg-white shadow-xs">
+        <div className="divide-y divide-[#edf4ef]">
+          {filtered.slice(0, visible).map(({ e, name, email, whatsapp, title }) => {
+            const date = formatDate(e.status === 'active' ? e.activated_at || e.created_at : e.created_at);
+            return (
+              <div key={e.id} className="flex flex-col gap-3 p-4 transition hover:bg-[#f9fbfa] sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e5f4f2] text-sm font-bold text-[#006d77]">
+                    {(name || email || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-[#112d22]">{name || email || 'Akun tanpa nama'}</p>
+                      <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + STATUS_META[e.status].badge}>{STATUS_META[e.status].label}</span>
+                      {e.source === 'manual' && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">Manual</span>}
+                    </div>
+                    <p className="mt-0.5 text-xs font-semibold text-[#2f5243]">{title || 'Kelas tidak ditemukan'}</p>
+                    <p className="mt-0.5 text-[11px] text-[#71877b]">
+                      {[email, whatsapp ? `WA ${whatsapp}` : '', date].filter(Boolean).join(' · ')}
+                    </p>
+                    {e.payment_note && <p className="mt-0.5 text-[11px] italic text-[#71877b]">Catatan: {e.payment_note}</p>}
+                  </div>
+                </div>
+                <div className="shrink-0 self-end sm:self-auto">
+                  {e.status === 'pending' && (
+                    <button type="button" onClick={() => onUpdateAccess(e.id, 'active')} className="rounded-full bg-[#006d77] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#00545c] cursor-pointer">Aktifkan</button>
+                  )}
+                  {e.status === 'active' && (
+                    <button type="button" onClick={() => onUpdateAccess(e.id, 'cancelled')} className="rounded-full border border-[#efd2c8] px-3 py-1.5 text-xs font-semibold text-[#b36d4c] hover:bg-red-50 cursor-pointer">Cabut Akses</button>
+                  )}
+                  {e.status === 'cancelled' && (
+                    <button type="button" onClick={() => onUpdateAccess(e.id, 'active')} className="rounded-full border border-[#cfe0d5] px-3 py-1.5 text-xs font-semibold text-[#006d77] hover:bg-emerald-50 cursor-pointer">Pulihkan</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {!filtered.length && (
+            <p className="p-8 text-center text-xs text-[#71877b]">{enrollments.length ? 'Tidak ada enrollment yang sesuai dengan filter.' : 'Belum ada enrollment peserta.'}</p>
+          )}
+        </div>
+        {filtered.length > visible && (
+          <button type="button" onClick={() => setVisible((v) => v + ENROLLMENT_PAGE_SIZE)} className="w-full border-t border-[#edf4ef] py-3 text-xs font-bold text-[#006d77] hover:bg-[#f4f9f6] cursor-pointer">
+            Tampilkan lebih banyak ({filtered.length - visible} lagi)
+          </button>
+        )}
+      </div>
+    </div>
+  );
 };
 
 /** Fitur 1: tambah peserta yang membayar di luar web/Mayar (mis. dari Malaysia). */

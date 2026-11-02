@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ExternalLink, ImagePlus, Loader2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ExternalLink, ImagePlus, Loader2, X } from 'lucide-react';
 import { requireSupabase } from '../lib/supabase';
 
 export const INSTAGRAM_HANDLE = '@almadraj.academia';
@@ -97,6 +97,35 @@ export const RegistrationRequirements = ({ userId, onCompleteChange }: { userId:
         })}
       </div>
       {error && <p className="mt-2 text-xs font-semibold text-amber-300">{error}</p>}
+    </div>
+  );
+};
+
+export const hasCompleteProofs = async (userId: string) => {
+  const { data } = await requireSupabase().from('registration_proofs').select('share_story_path,follow_ig_path').eq('user_id', userId).maybeSingle();
+  return proofsComplete(data);
+};
+
+/** Langkah syarat sebelum pembayaran; dibuka dari tombol daftar di halaman kelas. */
+export const RegistrationProofsModal = ({ userId, courseTitle, onClose, onContinue }: { userId: string; courseTitle: string; onClose: () => void; onContinue: () => void }) => {
+  const [complete, setComplete] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Syarat pendaftaran">
+      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-[#102c22] p-5 text-white shadow-xl sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#83c5be]">Pendaftaran</p>
+            <h2 className="mt-1 text-lg font-bold leading-snug">{courseTitle}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Tutup" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/20 text-[#c5d9cf] hover:bg-white/10 cursor-pointer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <RegistrationRequirements userId={userId} onCompleteChange={setComplete} />
+        <button type="button" disabled={!complete} onClick={onContinue} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#83c5be] px-4 text-sm font-bold text-[#102c22] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer">
+          Lanjut ke Pembayaran <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 };
