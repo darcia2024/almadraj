@@ -111,10 +111,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, processed: false, note: 'Order not found' });
     }
 
-    const paidAmount = Number(data.amount ?? data.totalAmount ?? data.total_amount);
-    if (isPaidEvent && Number.isFinite(paidAmount) && paidAmount !== Number(order.amount)) {
-      console.warn('[mayar-webhook] Nominal tidak cocok', { orderId: order.id, paidAmount, expected: Number(order.amount) });
-      return res.status(422).json({ message: 'Payment amount does not match the order' });
+    // `amount` dari Mayar bisa sudah termasuk biaya admin/channel yang dibebankan ke pembeli
+    // (mis. 552.500 untuk kelas 550.000), sedangkan `nettAmount` adalah harga dasarnya.
+    // Tolak hanya kalau pembayaran KURANG dari harga order.
+    const amountCandidates = [data.amount, data.totalAmount, data.total_amount, data.nettAmount, data.nett_amount]
+      .filter((value) => value !== undefined && value !== null && value !== '')
+      .map(Number)
+      .filter(Number.isFinite);
+    const paidAmount = amountCandidates.length ? Math.max(...amountCandidates) : null;
+    if (isPaidEvent && paidAmount !== null && paidAmount < Number(order.amount)) {
+      console.warn('[mayar-webhook] Nominal kurang dari harga order', { orderId: order.id, paidAmount, expected: Number(order.amount) });
+      return res.status(422).json({ message: 'Payment amount is less than the order amount' });
     }
 
     if (isReminderEvent) {

@@ -259,7 +259,7 @@ export const MaddahParticipantsPanel = ({ profiles, courses, enrollments }: Pick
   const [courseId, setCourseId] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
   const [search, setSearch] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'' | 'list' | 'emails'>('');
   const [proofs, setProofs] = useState<Record<string, RegistrationProof>>({});
 
   useEffect(() => {
@@ -281,10 +281,18 @@ export const MaddahParticipantsPanel = ({ profiles, courses, enrollments }: Pick
       .sort((a, b) => (a.p?.full_name || '').localeCompare(b.p?.full_name || ''));
   }, [enrollments, profiles, courseId, statusFilter, search]);
 
-  const copyList = async () => {
-    const text = `Peserta ${selected?.title} (${rows.length})\n` + rows.map(({ p }, i) => `${i + 1}. ${p?.full_name || '-'} | ${p?.email || '-'} | ${p?.whatsapp || '-'}`).join('\n');
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+  // Email unik peserta yang tampil, dipisah koma: bisa langsung ditempel ke kolom "Bagikan" Google Drive.
+  const emails = useMemo(
+    () => Array.from(new Set(rows.map(({ p }) => (p?.email || '').trim().toLowerCase()).filter((m) => m.includes('@')))),
+    [rows],
+  );
+  const missingEmail = rows.length - rows.filter(({ p }) => (p?.email || '').includes('@')).length;
+
+  const copyText = async (text: string, kind: 'list' | 'emails') => {
+    try { await navigator.clipboard.writeText(text); setCopied(kind); setTimeout(() => setCopied(''), 1800); } catch {}
   };
+  const copyList = () => copyText(`Peserta ${selected?.title} (${rows.length})\n` + rows.map(({ p }, i) => `${i + 1}. ${p?.full_name || '-'} | ${p?.email || '-'} | ${p?.whatsapp || '-'}`).join('\n'), 'list');
+  const copyEmails = () => copyText(emails.join(', '), 'emails');
 
   return (
     <div className="space-y-4">
@@ -309,10 +317,19 @@ export const MaddahParticipantsPanel = ({ profiles, courses, enrollments }: Pick
                 </button>
               ))}
               <button type="button" onClick={() => void copyList()} disabled={!rows.length} className="inline-flex items-center gap-1 rounded-full border border-[#cfe0d5] px-3 py-1 font-semibold text-[#006d77] disabled:opacity-40 cursor-pointer">
-                <Copy className="h-3 w-3" /> {copied ? 'Tersalin' : 'Salin daftar'}
+                <Copy className="h-3 w-3" /> {copied === 'list' ? 'Tersalin' : 'Salin daftar'}
+              </button>
+              <button type="button" onClick={() => void copyEmails()} disabled={!emails.length} title="Untuk ditempel ke kolom Bagikan di Google Drive" className="inline-flex items-center gap-1 rounded-full bg-[#006d77] px-3 py-1 font-semibold text-white disabled:opacity-40 cursor-pointer">
+                <Copy className="h-3 w-3" /> {copied === 'emails' ? `${emails.length} email tersalin` : `Salin email (${emails.length})`}
               </button>
             </div>
           </div>
+        )}
+        {selected && (
+          <p className="mt-2 text-[11px] leading-relaxed text-[#71877b]">
+            Untuk Google Drive: klik kanan folder maddah ini → Bagikan → tempel email → pilih <strong>Pengakses</strong>, dan biarkan akses umum <strong>"Dibatasi"</strong>.
+            {missingEmail > 0 && <span className="font-semibold text-amber-700"> {missingEmail} peserta belum punya email tercatat, jadi tidak ikut tersalin.</span>}
+          </p>
         )}
       </div>
 
