@@ -8,6 +8,7 @@ import {
   Truck, UserRound, UsersRound, Video, Volume2, VolumeX, X
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
+import { COVER_CACHE_CONTROL, compressCoverImage } from '../lib/coverImage';
 import { getCourseCoverImage } from '../data/galleryData';
 import { CourseCoverField } from './CourseCoverField';
 import { InstallAppButton } from '../pwa/PwaLayer';
@@ -41,6 +42,7 @@ import {
   checkBooksTableStatus
 } from '../data/booksData';
 import { EnrollmentListPanel, ManualEnrollPanel, MaddahParticipantsPanel } from './AdminParticipantPanels';
+import { CoverCompressorCard } from './CoverCompressorCard';
 import { RegistrationProofsModal, RegistrationRequirements, hasCompleteProofs } from './RegistrationProofs';
 
 type ProgramType = 'Dars' | 'Bimbel';
@@ -5637,11 +5639,13 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
       const finalProgramType = courseDraft.program_type || 'Dars';
       let thumbnailUrl = courseDraft.thumbnail_url || '';
       if (courseCoverFile) {
-        const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[courseCoverFile.type];
-        if (!extension || courseCoverFile.size > 5 * 1024 * 1024) throw new Error('Cover harus berupa JPG, PNG, atau WebP maksimal 5 MB.');
+        const accepted = ['image/jpeg', 'image/png', 'image/webp'].includes(courseCoverFile.type);
+        if (!accepted || courseCoverFile.size > 5 * 1024 * 1024) throw new Error('Cover harus berupa JPG, PNG, atau WebP maksimal 5 MB.');
+        // Cover dikecilkan dulu supaya katalog tidak menghabiskan kuota egress Supabase.
+        const cover = await compressCoverImage(courseCoverFile);
         const storage = requireSupabase().storage.from('course-covers');
-        const path = `${courseDraft.id || normalizedSlug}/${crypto.randomUUID()}.${extension}`;
-        const upload = await storage.upload(path, courseCoverFile, { contentType: courseCoverFile.type, upsert: false });
+        const path = `${courseDraft.id || normalizedSlug}/${crypto.randomUUID()}.${cover.extension}`;
+        const upload = await storage.upload(path, cover.blob, { contentType: cover.contentType, upsert: false, cacheControl: COVER_CACHE_CONTROL });
         if (upload.error) throw new Error('Cover gagal diunggah: ' + upload.error.message);
         thumbnailUrl = storage.getPublicUrl(path).data.publicUrl;
         setCourseDraft((draft) => draft ? { ...draft, thumbnail_url: thumbnailUrl } : draft);
@@ -6035,6 +6039,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </div>
                 </button>
               </div>
+
+              <CoverCompressorCard courses={courses} onDone={() => void loadData()} />
 
               {/* Course Health & Readiness Checklist */}
               <section className="rounded-2xl border border-[#dce9df] bg-white p-5 sm:p-6 shadow-xs">
