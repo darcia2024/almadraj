@@ -96,6 +96,14 @@ export const isMasterAdmin = (email?: string | null): boolean => {
   return MASTER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
 };
 
+// Format rekaman kelas: Dars selalu video; Bimbel umumnya rekaman suara (media_format kelas).
+const courseMediaFormat = (course: Pick<Course, 'program_type' | 'media_format'>) =>
+  (course.program_type || 'Dars') === 'Dars' ? 'video' : (course.media_format || 'audio');
+const recordingNounFor = (course: Pick<Course, 'program_type' | 'media_format'>) => {
+  const format = courseMediaFormat(course);
+  return format === 'audio' ? 'rekaman suara (audio)' : format === 'hybrid' ? 'rekaman suara & video' : 'rekaman video';
+};
+
 const money = (amount: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
 
 /** Harga coret paket Bimbel: total harga satuan semua maddah di fakultas & tingkat yang sama. 0 bila tidak lebih mahal. */
@@ -2604,6 +2612,9 @@ const CourseRouteV2 = ({
   const isFree = course.price === 0;
   const hasAccess = isFree || enrolled;
   const originalPrice = bundleOriginalPrice(course, bimbelSiblings);
+  const mediaFormat = courseMediaFormat(course);
+  const isAudioOnly = mediaFormat === 'audio';
+  const recordingNoun = recordingNounFor(course);
 
   const kitabName = detail?.kitabName || course.title;
   const authorName = detail?.authorName || 'Ulama Ahlussunnah wal Jama\'ah';
@@ -2624,7 +2635,7 @@ const CourseRouteV2 = ({
     'Guru, asatidz, dan da\'i yang memerlukan rujukan syarah terpercaya.',
   ];
   const facilities = detail?.facilities || [
-    'Akses rekaman video pembelajaran beresolusi tinggi tanpa batas waktu',
+    mediaFormat === 'video' ? 'Akses rekaman video pembelajaran beresolusi tinggi tanpa batas waktu' : `Akses ${recordingNoun} pembahasan tanpa batas waktu`,
     'Diktat teks matan & catatan faedah ibarat kitab',
     'Tersimpan di dashboard akun mahasiswa Al Madraj',
     'Pelacakan progress belajar mandiri',
@@ -2633,7 +2644,7 @@ const CourseRouteV2 = ({
   const lessons = detail?.lessons || (previewLessons.length ? previewLessons.map((l, i) => ({
     sortOrder: i + 1,
     title: l.title,
-    duration: l.duration || 'Video Kajian',
+    duration: l.duration || (isAudioOnly ? 'Rekaman Audio' : 'Video Kajian'),
     description: 'Pembahasan materi bertahap sesuai urutan muqarrar kitab.',
   })) : []);
 
@@ -2816,7 +2827,7 @@ const CourseRouteV2 = ({
                       {course.schedule || 'Akses Mandiri (Self-Paced)'}
                     </p>
                     <p className="text-[11px] text-white/60 truncate pt-0.5">
-                      Rekaman Video Seumur Hidup
+                      {isAudioOnly ? 'Rekaman Audio Seumur Hidup' : mediaFormat === 'hybrid' ? 'Rekaman Audio & Video Seumur Hidup' : 'Rekaman Video Seumur Hidup'}
                     </p>
                   </div>
                 </div>
@@ -3026,7 +3037,7 @@ const CourseRouteV2 = ({
                               </div>
                               {/* Duration Badge */}
                               <span className="absolute bottom-1 right-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[9.5px] font-bold text-white tracking-wide">
-                                {lesson.duration || 'HD Video'}
+                                {lesson.duration || (isAudioOnly ? 'Audio' : 'HD Video')}
                               </span>
                             </div>
 
@@ -3096,7 +3107,7 @@ const CourseRouteV2 = ({
                                 className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-[#006d77] px-4.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00565e] active:scale-95 transition cursor-pointer"
                               >
                                 <Play className="h-3.5 w-3.5 fill-current" />
-                                <span>Tonton Gratis</span>
+                                <span>{isAudioOnly ? 'Dengar Gratis' : 'Tonton Gratis'}</span>
                               </button>
                             ) : (
                               <button
@@ -3223,7 +3234,7 @@ const CourseRouteV2 = ({
               <div className="mt-6 space-y-3">
                 {[
                   {
-                    q: 'Bagaimana cara mengakses rekaman video setelah pendaftaran?',
+                    q: `Bagaimana cara mengakses ${recordingNoun} setelah pendaftaran?`,
                     a: 'Setelah pembayaran terkonfirmasi, materi kelas otomatis terbuka di akun Anda. Anda bisa langsung masuk ke menu Ruang Belajar kapan saja melalui HP, tablet, maupun laptop.',
                   },
                   {
@@ -3281,7 +3292,11 @@ const CourseRouteV2 = ({
                   </p>
                   <div className="flex items-start gap-2.5">
                     <Check className="h-4 w-4 text-[#006d77] shrink-0 mt-0.5" />
-                    <span><strong>{lessons.length || course.duration}</strong> materi video rekaman beresolusi jernih</span>
+                    <span>{mediaFormat === 'video'
+                      ? <><strong>{lessons.length || course.duration}</strong> materi video rekaman beresolusi jernih</>
+                      : lessons.length
+                      ? <><strong>{lessons.length}</strong> materi {recordingNoun} pembahasan</>
+                      : <>Materi berupa <strong>{recordingNoun}</strong> pembahasan</>}</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <Check className="h-4 w-4 text-[#006d77] shrink-0 mt-0.5" />
@@ -4369,7 +4384,11 @@ const CatalogCourseCard = ({
             <div className="relative z-10 flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11.5px] font-medium text-white/85 truncate">
               <CirclePlay className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white/80 shrink-0" />
               <span className="truncate">{course.duration || '20 pertemuan'}</span>
-              <span className="hidden sm:inline"> · {isFree ? 'Video & materi gratis' : 'Video & pembahasan'}</span>
+              <span className="hidden sm:inline"> · {(() => {
+                const format = courseMediaFormat(course);
+                const label = format === 'audio' ? 'Rekaman audio' : format === 'hybrid' ? 'Audio & video' : 'Video';
+                return isFree ? label + ' & materi gratis' : label + ' & pembahasan';
+              })()}</span>
             </div>
           </div>
         )}
@@ -4479,7 +4498,7 @@ const CatalogDetailModal = ({
     'Santri dan pembelajar ilmu Islam yang ingin belajar secara terarah.',
   ];
   const facilities = detail?.facilities || [
-    'Akses rekaman video pembelajaran beresolusi tinggi',
+    courseMediaFormat(course) === 'video' ? 'Akses rekaman video pembelajaran beresolusi tinggi' : `Akses ${recordingNounFor(course)} pembahasan`,
     'Diktat teks matan & catatan faedah ibarat kitab',
     'Tersimpan di dashboard akun mahasiswa Al Madraj',
     'Akses fleksibel tanpa batas waktu',
@@ -4606,10 +4625,10 @@ const CatalogDetailModal = ({
                       </span>
                     </div>
                     <h4 className="mt-1 text-sm font-bold text-[#17382c]">
-                      Akses Video &amp; Rekaman Kitab Terbuka Setelah Pendaftaran
+                      {courseMediaFormat(course) === 'audio' ? 'Akses Rekaman Audio Terbuka Setelah Pendaftaran' : 'Akses Video & Rekaman Kitab Terbuka Setelah Pendaftaran'}
                     </h4>
                     <p className="mt-0.5 text-xs text-[#597566]">
-                      Daftar program ini untuk membuka seluruh materi video pembelajaran, diktat catatan faedah, dan pelacakan progres belajar.
+                      Daftar program ini untuk membuka seluruh {courseMediaFormat(course) === 'video' ? 'materi video pembelajaran' : recordingNounFor(course) + ' pembahasan'}, diktat catatan faedah, dan pelacakan progres belajar.
                     </p>
                   </div>
                   <button
@@ -4653,7 +4672,7 @@ const CatalogDetailModal = ({
                             </p>
                           )}
                           <span className="mt-1 inline-block text-[10px] font-medium text-[#7d9789]">
-                            {hasAccess ? (lesson.duration || 'Video Kajian') : 'Materi Eksklusif · Terkunci'}
+                            {hasAccess ? (lesson.duration || (courseMediaFormat(course) === 'audio' ? 'Rekaman Audio' : 'Video Kajian')) : 'Materi Eksklusif · Terkunci'}
                           </span>
                         </div>
                       </div>
