@@ -46,7 +46,7 @@ const mediaTypeOf = (name, mimeType = '') => {
 const parseName = (name) => {
   const base = String(name).replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
   const leading = base.match(/^(\d{1,3})(?:\s*[-.)_:]\s*|\s+)(.*)$/);
-  const meeting = base.match(/(?:pertemuan|pert\.?|sesi|part|bagian|ke)\s*-?\s*(\d{1,3})/i);
+  const meeting = base.match(/(?:pertemuan|pert\.?|pt\.?|sesi|part|bagian|ke)\s*-?\s*(\d{1,3})/i);
   const order = leading ? Number(leading[1]) : meeting ? Number(meeting[1]) : null;
   let title = leading ? leading[2].trim() : base;
   if (!title || /^\d+$/.test(title)) title = 'Pertemuan ' + (order ?? title);
@@ -59,6 +59,7 @@ const listViaDriveApi = async (folderId, apiKey) => {
   do {
     const params = new URLSearchParams({
       q: `'${folderId}' in parents and trashed = false`,
+      // Subfolder ikut terdaftar (mimeType folder) supaya bisa dibaca isinya.
       fields: 'nextPageToken, files(id, name, mimeType, createdTime)',
       orderBy: 'createdTime',
       pageSize: '1000',
@@ -84,30 +85,70 @@ const listViaEmbeddedView = async (folderId) => {
   if (!response.ok) throw new Error('Folder Drive tidak bisa dibuka (' + response.status + '). Pastikan aksesnya "Siapa saja yang memiliki link".');
   const html = await response.text();
   const files = [];
-  const entryPattern = /id="entry-([\w-]{10,})"[\s\S]*?class="flip-entry-title">([^<]*)</g;
-  let match;
-  while ((match = entryPattern.exec(html))) {
-    const name = match[2].replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-    files.push({ id: match[1], name, mimeType: '' });
+  // Satu blok per entri. Jenis file dibaca dari ikon Drive (".../type/audio/mpeg"), karena nama file
+  // dari HP sering tanpa ekstensi ("Nahwu Sharaf (pert 1)").
+  for (const block of html.split('class="flip-entry"').slice(1)) {
+    const id = block.match(/^\s*id="entry-([\w-]{10,})"/)?.[1];
+    const title = block.match(/class="flip-entry-title">([^<]*)</)?.[1];
+    if (!id || title === undefined) continue;
+    const name = title.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+    const isFolder = /href="[^"]*\/drive\/folders\//.test(block);
+    const mimeType = isFolder ? FOLDER_MIME : (block.match(/\/type\/([\w.+-]+\/[\w.+-]+)/)?.[1] || '');
+    files.push({ id, name, mimeType });
   }
   return files;
 };
 
-const listFolder = async (folderId) => {
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const MAX_DEPTH = 3;
+
+const listOneFolder = async (folderId) => {
   const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
   return apiKey ? listViaDriveApi(folderId, apiKey) : listViaEmbeddedView(folderId);
 };
 
+// PJ sering membuat subfolder per pertemuan ("Pertemuan 3", "Rekaman bimbel", ...). Ikut baca isinya;
+// nama subfolder dipakai sebagai nomor/judul pertemuan bila nama file-nya tidak bernomor.
+const listFolder = async (folderId, depth = 0, parents = []) => {
+  const entries = await listOneFolder(folderId);
+  const files = entries.filter((e) => e.mimeType !== FOLDER_MIME).map((e) => ({ ...e, parents }));
+  if (depth >= MAX_DEPTH) return files;
+  const subfolders = entries.filter((e) => e.mimeType === FOLDER_MIME);
+  const nested = await Promise.all(subfolders.map((f) => listFolder(f.id, depth + 1, [...parents, f.name]).catch(() => [])));
+  return files.concat(...nested);
+};
+
+// Nomor & judul pertemuan: dari nama file, atau dari subfolder terdekat yang bernomor.
+const describeFile = (file, siblingsInFolder) => {
+  const own = parseName(file.name);
+  const ownHasNumber = /\d/.test(file.name.replace(/\.[a-z0-9]{2,5}$/i, '')) && own.order !== null;
+  if (ownHasNumber || !file.parents.length) return own;
+  for (let i = file.parents.length - 1; i >= 0; i -= 1) {
+    const folder = parseName(file.parents[i]);
+    if (folder.order !== null) {
+      const title = siblingsInFolder > 1 ? `${file.parents[i]} — ${own.title}` : file.parents[i];
+      return { order: folder.order, title };
+    }
+  }
+  return own;
+};
+
 const syncCourse = async (course, folderId) => {
-  const files = (await listFolder(folderId))
+  const media = (await listFolder(folderId))
     .map((file) => ({ ...file, type: mediaTypeOf(file.name, file.mimeType) }))
     .filter((file) => file.type);
+  const perFolder = new Map();
+  for (const file of media) {
+    const key = file.parents.join('/');
+    perFolder.set(key, (perFolder.get(key) || 0) + 1);
+  }
+  const files = media.map((file) => ({ ...file, ...describeFile(file, perFolder.get(file.parents.join('/')) || 1) }));
 
   const existing = await supabaseFetch(
     'lessons?course_id=eq.' + course.id + '&select=id,drive_file_id,is_published,sort_order&order=sort_order.desc',
   );
   const known = new Map(existing.filter((l) => l.drive_file_id).map((l) => [l.drive_file_id, l]));
-  const fresh = files.filter((file) => !known.has(file.id)).map((file) => ({ ...file, ...parseName(file.name) }));
+  const fresh = files.filter((file) => !known.has(file.id));
   // File tanpa nomor ditaruh setelah nomor tertinggi, supaya tidak bentrok dengan "Pertemuan N".
   let nextOrder = Math.max(0, ...existing.map((l) => Number(l.sort_order) || 0), ...fresh.map((f) => f.order || 0)) + 1;
   const rows = fresh.map((file) => {
