@@ -44,6 +44,7 @@ import {
 } from '../data/booksData';
 import { EnrollmentListPanel, ManualEnrollPanel, MaddahParticipantsPanel } from './AdminParticipantPanels';
 import { CoverCompressorCard } from './CoverCompressorCard';
+import { AdminPaymentRecheck } from './AdminPaymentRecheck';
 import { RegistrationProofsModal, RegistrationRequirements, hasCompleteProofs } from './RegistrationProofs';
 
 type ProgramType = 'Dars' | 'Bimbel';
@@ -6805,6 +6806,8 @@ const AdminProductionRoute = ({ onError, user, profile }: { onError: (message: s
                   </p>
                 </div>
               </div>
+
+              <AdminPaymentRecheck orders={orders} onDone={() => void loadData()} />
 
               <div className="rounded-2xl border border-[#dce9df] bg-white shadow-xs overflow-hidden">
                 <div className="p-4 border-b border-[#edf4ef] flex items-center justify-between">

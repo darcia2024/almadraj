@@ -78,7 +78,7 @@ export default async function handler(req, res) {
     const invoice = await fetchInvoice(order.provider_checkout_id);
     if (!invoice.ok) {
       console.warn('[mayar-verify] Invoice tidak bisa dicek', { orderId: order.id, httpStatus: invoice.httpStatus });
-      return res.status(200).json({ status: order.status, checked: false, mayar: 'unavailable' });
+      return res.status(200).json({ status: order.status, checked: false, mayar: 'unavailable', mayarHttp: invoice.httpStatus });
     }
     const mayarStatus = String(invoice.data.status || '').toLowerCase();
     const paidAmount = Number(invoice.data.amount);
