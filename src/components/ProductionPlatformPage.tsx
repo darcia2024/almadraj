@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { requireSupabase, supabase, supabaseConfigured } from '../lib/supabase';
 import { COVER_CACHE_CONTROL, compressCoverImage } from '../lib/coverImage';
+import { verifyPaymentWithMayar } from '../lib/verifyPayment';
 import { getCourseCoverImage } from '../data/galleryData';
 import { CourseCoverField } from './CourseCoverField';
 import { InstallAppButton } from '../pwa/PwaLayer';
@@ -9612,6 +9613,8 @@ const PaymentStatusRoute = ({ path, user, onNavigate }: { path: string; user: { 
   const load = async () => {
     if (!orderId) { setMessage('Nomor order tidak valid.'); setLoading(false); return; }
     const sb = requireSupabase();
+    // Cek langsung ke Mayar dulu, supaya pembayaran yang webhook-nya gagal tetap terbuka.
+    await verifyPaymentWithMayar(orderId);
     await sb.rpc('refresh_lms_order_status', { p_order_id: orderId });
     const result = await sb.from('orders').select('id,amount,status,checkout_url,expires_at,courses(title,slug)').eq('id', orderId).eq('user_id', user.id).maybeSingle();
     if (result.error) setMessage(result.error.message);
@@ -9637,7 +9640,25 @@ const PaymentStatusRoute = ({ path, user, onNavigate }: { path: string; user: { 
 const TransactionsProductionRoute = ({ user }: { user: { id: string } }) => {
   const [orders, setOrders] = useState<Array<{ id: string; amount: number; status: string; provider: string; created_at: string; checkout_url: string | null; courses?: { title: string }[] }>>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { requireSupabase().from('orders').select('id,amount,status,provider,created_at,checkout_url,courses(title)').eq('user_id', user.id).order('created_at', { ascending: false }).then(({ data, error }) => { if (!error) setOrders((data || []) as typeof orders); setLoading(false); }); }, [user.id]);
+  useEffect(() => {
+    let active = true;
+    const load = () => requireSupabase().from('orders').select('id,amount,status,provider,created_at,checkout_url,courses(title)').eq('user_id', user.id).order('created_at', { ascending: false });
+    load().then(async ({ data, error }) => {
+      if (!active) return;
+      // Supabase mengembalikan relasi many-to-one sebagai objek, bukan array.
+      const rows = ((data || []) as any[]).map((o) => ({ ...o, courses: Array.isArray(o.courses) ? o.courses : o.courses ? [o.courses] : [] }));
+      if (!error) setOrders(rows as typeof orders);
+      setLoading(false);
+      // Order pending dengan tagihan Mayar: cek langsung ke Mayar, lalu muat ulang bila ada yang jadi lunas.
+      const pending = rows.filter((o) => o.status === 'pending' && o.checkout_url).slice(0, 5);
+      const results = await Promise.all(pending.map((o) => verifyPaymentWithMayar(o.id)));
+      if (active && results.includes('paid')) {
+        const fresh = await load();
+        if (active && !fresh.error) setOrders(((fresh.data || []) as any[]).map((o) => ({ ...o, courses: Array.isArray(o.courses) ? o.courses : o.courses ? [o.courses] : [] })) as typeof orders);
+      }
+    });
+    return () => { active = false; };
+  }, [user.id]);
   if (loading) return <PublicLoading />;
   return <div className="space-y-5"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#006d77]">Akun peserta</p><h1 className="mt-2 text-3xl font-semibold">Riwayat transaksi</h1><p className="mt-2 text-sm text-[#607568]">Semua order dan status pembayaran yang terkait dengan akunmu.</p></div><section className="rounded-[18px] border border-[#d4e1d8] bg-white p-5">{orders.length ? <div className="divide-y divide-[#e4eee7]">{orders.map((order) => <div key={order.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{order.courses?.[0]?.title || 'Program Al Madroj'}</p><p className="mt-1 text-xs text-[#819289]">{new Date(order.created_at).toLocaleDateString('id-ID')} · {order.provider}</p></div><div className="flex items-center gap-4"><div className="text-left sm:text-right"><p className="font-semibold text-[#006d77]">{money(order.amount)}</p><p className="mt-1 text-xs uppercase text-[#819289]">{order.status}</p></div>{order.status === 'pending' && order.checkout_url && <a href={order.checkout_url} className="text-xs font-bold text-[#006d77] underline">Bayar</a>}</div></div>)}</div> : <p className="py-5 text-sm text-[#819289]">Belum ada transaksi.</p>}</section></div>;
 };

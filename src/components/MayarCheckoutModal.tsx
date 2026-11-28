@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Clock, ExternalLink, Loader2, LockKeyhole, X } from 'lucide-react';
 import { requireSupabase } from '../lib/supabase';
+import { verifyPaymentWithMayar } from '../lib/verifyPayment';
 import { WhatsAppGroupLinks } from './WhatsAppGroupLinks';
 
 export type MayarCheckoutSession = {
@@ -40,12 +41,20 @@ export const MayarCheckoutModal = ({
   const [status, setStatus] = useState<OrderStatus>('pending');
   const statusRef = useRef<OrderStatus>('pending');
 
+  const pollCount = useRef(0);
+
   const checkStatus = useCallback(async () => {
     if (statusRef.current === 'paid') return;
     try {
       const sb = requireSupabase();
       const { data } = await sb.from('orders').select('status').eq('id', session.orderId).maybeSingle();
-      const next = (data?.status || 'pending') as OrderStatus;
+      let next = (data?.status || 'pending') as OrderStatus;
+      // Cadangan bila webhook Mayar terlambat/gagal: tiap ~12 detik minta server cek invoice langsung ke Mayar.
+      pollCount.current += 1;
+      if (next === 'pending' && pollCount.current % 3 === 0) {
+        const verified = await verifyPaymentWithMayar(session.orderId);
+        if (verified === 'paid') next = 'paid';
+      }
       if (next !== statusRef.current) {
         statusRef.current = next;
         setStatus(next);
